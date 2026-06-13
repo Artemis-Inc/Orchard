@@ -1,0 +1,53 @@
+{
+  "name": "orchard",
+  "displayName": "Orchard",
+  "description": "Language support and the leaf file icon for Orchard (.orch), a typed, concurrent language for building LLM agents.",
+  "version": "3.0.0",
+  "publisher": "artemis-inc",
+  "license": "Apache-2.0",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "orchard",
+    "orch",
+    "llm",
+    "agents",
+    "ai"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Artemis-Inc/Orchard"
+  },
+  "homepage": "https://github.com/Artemis-Inc/Orchard",
+  "contributes": {
+    "languages": [
+      {
+        "id": "orchard",
+        "aliases": [
+          "Orchard",
+          "orch"
+        ],
+        "extensions": [
+          ".orch"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/orch.png",
+          "dark": "./icons/orch.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "orchard",
+        "scopeName": "source.orchard",
+        "path": "./syntaxes/orchard.tmLanguage.json"
+      }
+    ]
+  }
+}

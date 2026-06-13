@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v4 source for the Orchard Windows installer (.msi).
+
+  Build:  wix build packaging/windows/orchard.wxs -d Version=3.0.0 -o Orchard.msi
+  (the release workflow copies the built orch.exe to packaging/windows/orch.exe first)
+
+  It installs orch.exe to Program Files\Orchard, adds that folder to the system
+  PATH, and registers the leaf icon for .orch files in File Explorer.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Orchard"
+    Manufacturer="Artemis Inc."
+    Version="$(Version)"
+    UpgradeCode="8F3A2C44-1E6B-4D9A-9C2F-0A1B2C3D4E5F"
+    Scope="perMachine"
+    Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Orchard is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Orchard" />
+    </StandardDirectory>
+
+    <ComponentGroup Id="Main" Directory="INSTALLFOLDER">
+      <Component Id="OrchExe" Guid="*">
+        <File Id="orch.exe" Source="packaging/windows/orch.exe" KeyPath="yes" />
+        <Environment Id="UpdatePath" Name="PATH" Value="[INSTALLFOLDER]"
+                     Permanent="no" Part="last" Action="set" System="yes" />
+      </Component>
+
+      <Component Id="OrchIcon" Guid="*">
+        <File Id="orch.ico" Source="packaging/windows/orch.ico" KeyPath="yes" />
+      </Component>
+
+      <!-- .orch file association with the leaf icon -->
+      <Component Id="OrchFileAssoc" Guid="*">
+        <RegistryValue Root="HKCR" Key=".orch" Value="Orchard.Source" Type="string" KeyPath="yes" />
+        <RegistryValue Root="HKCR" Key=".orch" Name="Content Type" Value="text/x-orchard" Type="string" />
+        <RegistryValue Root="HKCR" Key="Orchard.Source" Value="Orchard source file" Type="string" />
+        <RegistryValue Root="HKCR" Key="Orchard.Source\DefaultIcon" Value="[INSTALLFOLDER]orch.ico" Type="string" />
+        <RegistryValue Root="HKCR" Key="Orchard.Source\shell\open\command"
+                       Value="&quot;[INSTALLFOLDER]orch.exe&quot; run &quot;%1&quot;" Type="string" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="Orchard" Level="1">
+      <ComponentGroupRef Id="Main" />
+    </Feature>
+  </Package>
+</Wix>

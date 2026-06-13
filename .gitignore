@@ -11,6 +11,10 @@ dist/
 # OS
 .DS_Store
 
+# Editor extension build output
+*.vsix
+editors/vscode/node_modules/
+
 # Internal design & planning docs (kept local only, never published)
 SPEC3.md
 DECISIONS.md

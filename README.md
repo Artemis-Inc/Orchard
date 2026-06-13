@@ -56,23 +56,6 @@ Deterministic glue (`for`/`if`/`match`/`retry`/`budget`) around autonomous spans
 and typed model calls is the move that defines Orchard. Plus first-class
 **concurrency** — `spawn` / `await` / `parallel` run delegate spans in parallel.
 
-## Why Rust
-
-- **A real language.** Own lexer, parser, gradual type checker, and a diffable
-  JSON IR. `orch check` catches errors before any model call; `orch fmt` is the
-  one true style; `orch compile` emits the IR.
-- **Embeddable everywhere.** A core library + a thin `orch` CLI + a **C ABI** +
-  **Python** (PyO3) + **WebAssembly** (wasm-bindgen) — every binding is a thin
-  adapter over one facade API. See [`docs/embedding.md`](docs/embedding.md).
-- **Pure Rust, no bundled C.** rustls (not OpenSSL), redb/in-memory (not
-  SQLite). Storage, providers, HTTP, and the async executor are traits with
-  pure-Rust defaults, so native, WASM, C, and Python all work.
-- **Safety enforced by the runtime, not the model.** Hard caps on
-  steps/tool-calls/spend; tighten-only `budget` scopes; secret taint-tracking +
-  `«…»` redaction at every sink; untrusted-content sentinels; an egress guard
-  (blocks loopback/private IPs, re-checks each redirect hop, strips creds
-  cross-host); files-pack realpath containment.
-
 ## The `orch` CLI
 
 | Command | Purpose |
