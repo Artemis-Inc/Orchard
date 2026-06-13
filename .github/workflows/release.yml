@@ -1,9 +1,13 @@
 name: release
 
-# Tag a version to cut a release:
+# Cut a release by pushing a version tag:
 #   git tag v3.0.1 && git push origin v3.0.1
+# Or re-run for an existing tag from the Actions tab / CLI:
+#   gh workflow run release.yml -f tag=v3.0.0
+#
 # This cross-builds the `orch` CLI for macOS, Linux, and Windows, builds the
-# .pkg and .msi installers, and publishes everything to a GitHub Release.
+# .pkg and .msi installers, publishes a Docker image, and uploads everything to
+# the GitHub Release for the tag.
 
 on:
   push:
@@ -11,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Version tag to build (e.g. v3.0.1)"
+        description: "Version tag to build (e.g. v3.0.0)"
         required: true
 
 permissions:
@@ -20,6 +24,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Resolved per job below; the tag drives the version and the checkout ref.
+  ORCH_REF: ${{ github.event.inputs.tag || github.ref }}
 
 jobs:
   build:
@@ -37,10 +43,14 @@ jobs:
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Resolve version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -66,7 +76,6 @@ jobs:
           stage="$(mktemp -d)"
           cp "target/${{ matrix.target }}/release/orch" "$stage/"
           cp README.md CHANGELOG.md "$stage/" 2>/dev/null || true
-          # Flat archive: the binary sits at the archive root.
           tar -czf "${name}.tar.gz" -C "$stage" .
 
       - name: Package (windows)
@@ -94,7 +103,12 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with: { pattern: "bin-*apple-darwin", path: art }
       - name: Build universal binary and .pkg
@@ -114,12 +128,18 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - shell: bash
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with: { name: bin-x86_64-pc-windows-msvc, path: art }
       - name: Install WiX
-        run: dotnet tool install --global wix
+        # Pin WiX v4: v6+ requires accepting the paid Open Source Maintenance
+        # Fee EULA, which cannot be accepted non-interactively in CI.
+        run: dotnet tool install --global wix --version 4.0.5
       - name: Build .msi
         shell: bash
         run: |
@@ -133,6 +153,8 @@ jobs:
   release:
     name: publish release
     needs: [build, macos-pkg, windows-msi]
+    # Publish whatever built, even if one installer job failed.
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -140,15 +162,14 @@ jobs:
       - name: Gather assets and checksums
         run: |
           mkdir -p dist
-          find art -name 'orch-*.tar.gz' -o -name 'orch-*.zip' \
-            -o -name 'Orchard-*.pkg' -o -name 'Orchard-*.msi' | while read -r f; do
-            cp "$f" dist/
-          done
+          find art \( -name 'orch-*.tar.gz' -o -name 'orch-*.zip' \
+            -o -name 'Orchard-*.pkg' -o -name 'Orchard-*.msi' \) -exec cp {} dist/ \;
           cd dist && sha256sum * > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: dist/*
-          generate_release_notes: true
+          fail_on_unmatched_files: false
 
   docker:
     name: docker image
@@ -156,8 +177,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - shell: bash
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
