@@ -1,0 +1,64 @@
+#!orchard 2.0
+
+//
+// triage.orch — deterministic glue around an autonomous span (SPEC §14.2).
+//
+//     orch run examples/2.0/triage.orch --skill triage report="API returns 500 on /login since the deploy; nobody can sign in"
+//     orch run examples/2.0/triage.orch -t "my dashboard is a little slow"
+//
+// The point of this file: `gen as Ticket` forces the model to return a value
+// of a TYPE you declared, so the code that follows can route on it with an
+// ordinary, exhaustive `match` — no string-parsing the model's prose.
+agent Triage {
+    model { provider: anthropic, name: "claude-sonnet-4-6" }
+
+    use web
+
+    memory { facts: true }
+
+    // Enums are the backbone of constrained generation: `gen as Severity`
+    // forces the model to pick exactly one of these.
+    enum Severity { low, medium, high, critical }
+
+    // A record type — `gen as Ticket` returns valid JSON coerced to this shape.
+    type Ticket {
+        title: str
+        severity: Severity
+        summary: str
+    }
+
+    // A `tool` is a deterministic effect the model (and your code) can call.
+    // This one is declarative HTTP; its body may use http/shell but not
+    // gen/delegate/state.
+    tool post_to_slack(channel: str, text: str) -> json {
+        http.post("https://slack.example/api/post", body: { channel: channel, text: text })
+    }
+
+    // An exposed skill (the model can call it as skill_triage; your code calls
+    // it as triage(...)). It mixes one constrained model call with deterministic
+    // routing — the central expressive move of Orchard.
+    skill triage(report: str) -> Ticket {
+        // 1) constrained extraction — guaranteed to be a valid Ticket
+        let t = gen as Ticket "Extract a ticket from this report:\n{report}"
+        // 2) deterministic routing — exhaustive over Severity (the checker
+        //    rejects a match that misses a variant and has no `_`).
+        match t.severity {
+            critical => {
+                post_to_slack(channel: "#oncall", text: "🚨 {t.title}")
+                remember "last_critical" = t.title
+            }
+            high => post_to_slack(channel: "#triage", text: t.title)
+            _ => {}
+            // low/medium: archive silently
+        }
+        return t
+    }
+
+    // Hand ambiguous chat to the autonomous loop, but cap the spend with a
+    // `budget(...)` block so an open-ended request can't run away.
+    on message(text: str) -> str {
+        return budget(spend: $0.10, steps: 6) {
+            delegate text
+        }
+    }
+}

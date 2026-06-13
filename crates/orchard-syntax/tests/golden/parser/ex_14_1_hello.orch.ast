@@ -1,0 +1,95 @@
+{
+  "pragma": "2.0",
+  "items": [
+    {
+      "Agent": {
+        "name": "Echo",
+        "members": [
+          {
+            "Config": {
+              "name": "model",
+              "settings": [
+                {
+                  "KeyValue": {
+                    "key": "provider",
+                    "value": {
+                      "kind": {
+                        "Ident": "ollama"
+                      }
+                    }
+                  }
+                },
+                {
+                  "KeyValue": {
+                    "key": "name",
+                    "value": {
+                      "kind": {
+                        "Literal": {
+                          "Str": "qwen3"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "On": {
+              "kind": "Message",
+              "param": {
+                "name": "text",
+                "ty": {
+                  "name": "str",
+                  "args": [],
+                  "optional": false
+                },
+                "default": null
+              },
+              "schedule_kind": "",
+              "schedule_value": null,
+              "watch_path": null,
+              "return_type": {
+                "name": "str",
+                "args": [],
+                "optional": false
+              },
+              "body": {
+                "stmts": [
+                  {
+                    "kind": {
+                      "Return": {
+                        "kind": {
+                          "Gen": {
+                            "as_type": null,
+                            "prompt": {
+                              "kind": {
+                                "InterpString": [
+                                  {
+                                    "Chunk": "Reply briefly and kindly to: "
+                                  },
+                                  {
+                                    "Expr": {
+                                      "kind": {
+                                        "Ident": "text"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "with_config": null
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

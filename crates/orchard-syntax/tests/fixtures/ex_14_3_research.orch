@@ -1,0 +1,21 @@
+#!orchard 2.0
+agent Lead {
+    model { provider: anthropic, name: "claude-sonnet-4-6" }
+    use web
+
+    skill survey(topic: str) -> str {
+        let angles = gen as list<str> "Three distinct research angles on: {topic}"
+        var findings: list<str> = []
+        for angle in angles {
+            // each angle is its own bounded autonomous span
+            let f = budget(spend: $0.20) {
+                delegate "Research this angle and cite sources: {angle}"
+            }
+            findings = findings + [f]
+        }
+        return gen "Synthesize these findings into a brief:\n{findings}"
+    }
+}
+// v2.1 will let the three angles run concurrently:
+//   let hs = angles |> map((a) => spawn delegate "Research: {a}")
+//   let findings = hs |> map(await)

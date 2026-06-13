@@ -1,0 +1,42 @@
+#!orchard 2.0
+
+//
+// mcp-notes.orch — plug an MCP server into an agent.
+//
+//     mkdir -p notes && orch run examples/2.0/mcp-notes.orch -t "write a note called todo.md with my groceries"
+//
+// `use mcp(...)` launches the official filesystem MCP server (via npx, so
+// Node.js is required), performs the MCP handshake over stdio, lists the
+// server's tools, and registers each under the `notes` namespace. One line
+// buys the whole MCP ecosystem.
+agent Quill {
+    model { provider: anthropic, name: "claude-sonnet-4-6" }
+
+    persona {
+        tone: "tidy, helpful"
+        instructions: """
+            Keep notes as Markdown files inside the notes directory.
+            Confirm the filename whenever you create or overwrite a note.
+        """
+    }
+
+    // The string is a command line. The runtime launches it as a subprocess
+    // and namespaces its tools under `notes`. Gated by policy.allow_mcp below.
+    use mcp("npx -y @modelcontextprotocol/server-filesystem ./notes") as notes
+
+    policy {
+        // The confirmation gate. Because `use mcp(...)` runs an arbitrary
+        // subprocess on your machine, the runtime prints the command and asks
+        // y/n before launching it — unless allow_mcp is true. Keeping it false
+        // (the default, spelled out here for visibility) means a .orch file
+        // someone sends you cannot silently start processes: you see exactly
+        // what would run and approve it. `orch info` also surfaces the command
+        // for review before you ever run the agent. Flip to true only for files
+        // you wrote yourself or have read end to end.
+        allow_mcp: false
+    }
+
+    on message(text: str) -> str {
+        return delegate text
+    }
+}

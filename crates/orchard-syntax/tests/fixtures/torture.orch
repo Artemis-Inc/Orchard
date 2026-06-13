@@ -1,0 +1,64 @@
+#!orchard 2.0
+// torture fixture for the P1 lexer: every hard lexical feature in one file.
+/* a nested /* block */ comment is fully skipped */
+
+// numbers, durations, money
+let ints = 1_000_000
+let f1 = 3.14
+let f2 = 1.0e9
+let f3 = 1e9
+let f4 = 2.5e-3
+let timeout = 30s
+let window = 15m
+let long = 2h
+let day = 1d
+let fast = 500ms
+let cost = $0.50
+let big = $100
+
+// booleans / null / keywords vs idents
+let flags = [true, false, null]
+let agentish = agent_count   // ident that merely starts with a keyword
+
+// operators (maximal munch): ranges, pipe, coalesce, optional-chain, arrows
+let r1 = 0..n
+let r2 = 1..=10
+let piped = data |> trim |> upper
+let co = a ?? b
+let opt = user?.name
+let cmp = x <= y and y >= z or not done
+let assigns = 0
+assigns += 1
+let lam = (a, b) => a + b
+fn h() -> int { return 1 }
+
+// raw strings keep braces/backslashes verbatim (no interpolation, no escapes)
+let raw = `{"json": "with \n no escape and {braces}"}`
+
+// simple + interpolated + nested-interpolation strings
+let plain = "no interpolation here"
+let greet = "Hi {name}, you have {inbox.count} msgs"
+let nested = "outer {wrap("inner {x}")} end"
+let braces = "literal {{ and }} braces"
+let esc = "tab\tnewline\nquote\"slash\\brace\{ unicode\u{1F333}"
+
+// triple-quoted with common-indent stripping + gen inside an interpolation
+skill demo(topic: str) -> str {
+    let prompt = """
+        Summarize {topic} in five bullets.
+        Inline call: {gen "one-liner about {topic}"}
+        Each bullet under 20 words.
+        """
+    return gen prompt
+}
+
+// ASI: operator at line end continues; close-brace then else does not split
+let total = 1 +
+    2 +
+    3
+if total > 5 {
+    reply "big"
+}
+else {
+    reply "small"
+}

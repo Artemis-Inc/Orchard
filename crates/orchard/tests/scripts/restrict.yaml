@@ -1,0 +1,3 @@
+- tool_calls:
+    - {name: skill_triage, args: {report: "x"}}
+- text: "ok"

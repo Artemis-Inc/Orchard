@@ -1,0 +1,9 @@
+- tool_calls:
+    - {name: flaky, args: {}}
+- tool_calls:
+    - {name: flaky, args: {}}
+- tool_calls:
+    - {name: flaky, args: {}}
+- tool_calls:
+    - {name: flaky, args: {}}
+- text: "done"

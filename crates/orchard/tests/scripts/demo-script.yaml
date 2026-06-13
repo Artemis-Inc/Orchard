@@ -1,0 +1,25 @@
+# Script for demo-offline.orch (the `mock` provider).
+#
+# A YAML list of model "turns". Each successive turn is returned on the next
+# model call the agent makes; the runtime plays them in order, executing any
+# tool_calls for real and feeding the results back between turns. A turn is
+# either a list of `tool_calls` (name + args) or a final `text` reply.
+
+# Turn 1 — the loop calls the calculator (this really computes 6 * 7).
+- tool_calls:
+    - name: calculate
+      args: { expression: "6 * 7" }
+
+# Turn 2 — store the result as a durable fact (this really writes to SQLite).
+- tool_calls:
+    - name: remember
+      args: { key: "last_answer", value: "42" }
+
+# Turn 3 — invoke the agent's own `note` skill, exposed to the loop as
+# `skill_note` (the runtime runs the skill body and returns its result).
+- tool_calls:
+    - name: skill_note
+      args: { text: "6 * 7 = 42, saved as last_answer" }
+
+# Turn 4 — no tool calls, just final text: the loop ends and this is the reply.
+- text: "Done — 6 × 7 = 42, saved to memory as 'last_answer'. Ran fully offline."

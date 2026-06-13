@@ -1,0 +1,14 @@
+[package]
+name = "orchard-ir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Orchard 3.0 IR node model, AST lowering, manifest build, and stable JSON serialization."
+
+[dependencies]
+orchard-syntax = { workspace = true }
+orchard-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+indexmap = { workspace = true }

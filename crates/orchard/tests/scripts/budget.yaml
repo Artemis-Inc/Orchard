@@ -1,0 +1,5 @@
+- tool_calls:
+    - {name: noop, args: {}}
+- tool_calls:
+    - {name: noop, args: {}}
+- text: "should not reach"

@@ -1,0 +1,175 @@
+{
+  "pragma": "2.0",
+  "items": [
+    {
+      "Agent": {
+        "name": "NewsBot",
+        "members": [
+          {
+            "Config": {
+              "name": "model",
+              "settings": [
+                {
+                  "KeyValue": {
+                    "key": "provider",
+                    "value": {
+                      "kind": {
+                        "Ident": "openai"
+                      }
+                    }
+                  }
+                },
+                {
+                  "KeyValue": {
+                    "key": "name",
+                    "value": {
+                      "kind": {
+                        "Literal": {
+                          "Str": "gpt-5.2"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "Use": {
+              "form": "Pack",
+              "name": "web",
+              "target": null,
+              "options": null
+            }
+          },
+          {
+            "Use": {
+              "form": "Pack",
+              "name": "files",
+              "target": null,
+              "options": [
+                {
+                  "name": "root",
+                  "value": {
+                    "kind": {
+                      "Literal": {
+                        "Str": "."
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "On": {
+              "kind": "Schedule",
+              "param": null,
+              "schedule_kind": "every",
+              "schedule_value": {
+                "kind": {
+                  "Literal": {
+                    "Duration": [
+                      1,
+                      "h"
+                    ]
+                  }
+                }
+              },
+              "watch_path": null,
+              "return_type": null,
+              "body": {
+                "stmts": [
+                  {
+                    "kind": {
+                      "Bind": {
+                        "name": "digest",
+                        "ty": null,
+                        "value": {
+                          "kind": {
+                            "Budget": {
+                              "args": [
+                                {
+                                  "label": "spend",
+                                  "value": {
+                                    "kind": {
+                                      "Literal": {
+                                        "Money": "0.30"
+                                      }
+                                    }
+                                  }
+                                }
+                              ],
+                              "body": {
+                                "stmts": [
+                                  {
+                                    "kind": {
+                                      "Expr": {
+                                        "kind": {
+                                          "Delegate": {
+                                            "goal": {
+                                              "kind": {
+                                                "Literal": {
+                                                  "Str": "Check the RSS feeds, summarize new items, dedupe."
+                                                }
+                                              }
+                                            },
+                                            "with_config": null
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "mutable": false
+                      }
+                    }
+                  },
+                  {
+                    "kind": {
+                      "Expr": {
+                        "kind": {
+                          "Call": {
+                            "callee": {
+                              "kind": {
+                                "Ident": "append_file"
+                              }
+                            },
+                            "args": [
+                              {
+                                "label": "path",
+                                "value": {
+                                  "kind": {
+                                    "Literal": {
+                                      "Str": "news.md"
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "label": "content",
+                                "value": {
+                                  "kind": {
+                                    "Ident": "digest"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

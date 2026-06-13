@@ -1,0 +1,7 @@
+#!orchard 2.0
+agent Echo {
+    model { provider: ollama, name: "qwen3" }   // free, local, no key
+    on message(text: str) -> str {
+        return gen "Reply briefly and kindly to: {text}"
+    }
+}

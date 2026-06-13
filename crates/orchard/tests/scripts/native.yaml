@@ -1,0 +1,4 @@
+- tool_calls:
+    - name: lookup_user
+      args: { id: 7 }
+- text: "user is Ada"

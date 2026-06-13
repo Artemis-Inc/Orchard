@@ -1,0 +1,11 @@
+[package]
+name = "orchard-syntax"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Orchard 3.0 front end: tokens, lexer, AST, spans, diagnostics, parser, formatter."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

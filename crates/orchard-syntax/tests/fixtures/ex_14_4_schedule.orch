@@ -1,0 +1,13 @@
+#!orchard 2.0
+agent NewsBot {
+    model { provider: openai, name: "gpt-5.2" }
+    use web
+    use files { root: "." }
+
+    on schedule(every: 1h) {
+        let digest = budget(spend: $0.30) {
+            delegate "Check the RSS feeds, summarize new items, dedupe."
+        }
+        append_file(path: "news.md", content: digest)
+    }
+}

@@ -1,0 +1,43 @@
+#!orchard 3.0
+
+//
+// demo-offline.orch — try first, no API key:
+//
+//     orch run examples/2.0/demo-offline.orch -t "demo"
+//
+// The `mock` provider replays a scripted conversation from demo-script.yaml
+// instead of calling a real model — zero keys, zero network, zero cost. But
+// everything *around* the model is real: the `calculate` tool actually runs,
+// `remember` really writes to the SQLite store, and the exposed `skill_note`
+// is genuinely invoked by the (scripted) autonomous loop. It is the whole
+// Orchard agent loop, minus the LLM bill. Inspect what it stored afterwards:
+//
+//     orch memory examples/2.0/demo-offline.orch
+agent Demo {
+    // For the mock provider, `name` is the script file (resolved next to this
+    // .orch file). Swap in `provider: anthropic, name: "claude-sonnet-4-6"`
+    // and the very same agent talks to a real model.
+    model { provider: mock, name: "demo-script.yaml" }
+
+    // Durable fact memory. Enabling it auto-exposes remember/recall/forget to
+    // the loop, and the scripted `remember` call below persists for real.
+    memory { facts: true }
+
+    // A built-in tool pack: `calculate` does exact arithmetic the model can call.
+    use calculator
+
+    // A skill is a procedure the model can invoke as a tool during `delegate`
+    // (here under the name `skill_note`). This one is pure glue — no model call —
+    // so the demo stays fully scripted and deterministic.
+    skill note(text: str) -> str {
+        return "noted: {text}"
+    }
+
+    // `delegate` hands the goal to the autonomous perceive->think->act loop.
+    // A handler must `reply`/`return` its response (a bare trailing expression
+    // is not auto-returned), so we `return` the loop's final answer.
+    on message(text: str) -> str {
+        emit "working offline via the mock provider…"
+        return delegate text
+    }
+}

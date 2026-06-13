@@ -1,0 +1,36 @@
+<!doctype html>
+<!--
+  Orchard 3.0 in the browser via WebAssembly. Build the wasm module first:
+
+      cargo install wasm-pack
+      wasm-pack build crates/orchard-wasm --target web --out-dir ../../examples/embed-web/pkg
+
+  Then serve this directory (e.g. `python3 -m http.server`) and open it.
+-->
+<html>
+  <head><meta charset="utf-8" /><title>Orchard 3.0 — WASM</title></head>
+  <body>
+    <h1>Orchard 3.0 in the browser</h1>
+    <pre id="out">loading…</pre>
+    <script type="module">
+      import init, { version, check, Agent } from "./pkg/orchard_wasm.js";
+
+      const SRC = `
+agent Greeter {
+    model { provider: mock, name: "echo" }
+    on message(text: str) -> str { return gen "Hello, {text}!" }
+}`;
+
+      async function main() {
+        await init();
+        const out = document.getElementById("out");
+        const errors = check(SRC, "greeter.orch");
+        if (errors) { out.textContent = "check errors:\n" + errors; return; }
+        const agent = new Agent(SRC, "greeter.orch");
+        const reply = await agent.message("browser");
+        out.textContent = `orchard ${version()}\n${reply}`;
+      }
+      main();
+    </script>
+  </body>
+</html>

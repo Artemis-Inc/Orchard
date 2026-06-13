@@ -1,0 +1,35 @@
+#!orchard 2.0
+agent Triage {
+    model { provider: anthropic, name: "claude-sonnet-4-6" }
+    use web
+    memory { facts: true }
+
+    enum Severity { low, medium, high, critical }
+    type Ticket { title: str, severity: Severity, summary: str }
+
+    tool post_to_slack(channel: str, text: str) -> json {
+        http.post("https://slack.example/api/post",
+                  body: { channel: channel, text: text })
+    }
+
+    skill triage(report: str) -> Ticket {
+        // 1) constrained extraction — guaranteed valid shape
+        let t = gen as Ticket "Extract a ticket from this report:\n{report}"
+
+        // 2) deterministic routing
+        match t.severity {
+            critical => {
+                post_to_slack(channel: "#oncall", text: "🚨 {t.title}")
+                remember "last_critical" = t.title
+            }
+            high => post_to_slack(channel: "#triage", text: t.title)
+            _    => {}    // archive silently
+        }
+        return t
+    }
+
+    on message(text: str) -> str {
+        // hand ambiguous chat to the autonomous loop, but cap the spend
+        return budget(spend: $0.10, steps: 6) { delegate text }
+    }
+}

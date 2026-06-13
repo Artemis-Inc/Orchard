@@ -1,0 +1,18 @@
+# Build artifacts
+target/
+dist/
+*.orch.ir.json
+
+# Runtime / local state
+*.orchmem
+*.orchmem.lock
+.env.local
+
+# OS
+.DS_Store
+
+# Internal design & planning docs (kept local only, never published)
+SPEC3.md
+DECISIONS.md
+BUILDPLAN3.md
+_internal/

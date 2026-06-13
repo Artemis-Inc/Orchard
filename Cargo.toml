@@ -1,0 +1,54 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/orchard-syntax",
+    "crates/orchard-types",
+    "crates/orchard-ir",
+    "crates/orchard-runtime",
+    "crates/orchard",
+    "crates/orch-cli",
+    "crates/orchard-ffi",
+]
+# Built with their own toolchains (maturin / wasm-pack), not the native gate.
+exclude = [
+    "crates/orchard-py",
+    "crates/orchard-wasm",
+]
+
+[workspace.package]
+version = "3.0.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+repository = "https://github.com/orchard-lang/orchard"
+authors = ["Orchard contributors"]
+
+[workspace.dependencies]
+# Core (all crates)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+rust_decimal = "1"
+indexmap = { version = "2", features = ["serde"] }
+# Runtime
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "io-util", "process", "fs"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+redb = "2"
+url = "2"
+regex = "1"
+sha2 = "0.10"
+futures = "0.3"
+async-trait = "0.1"
+serde_yaml = "0.9"
+# CLI
+clap = { version = "4", features = ["derive"] }
+# internal
+orchard-syntax = { path = "crates/orchard-syntax" }
+orchard-types = { path = "crates/orchard-types" }
+orchard-ir = { path = "crates/orchard-ir" }
+orchard-runtime = { path = "crates/orchard-runtime", default-features = false }
+orchard = { path = "crates/orchard" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"

@@ -1,0 +1,11 @@
+[package]
+name = "orchard-types"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Orchard 3.0 gradual type system, local inference, JSON-Schema lowering, and the static checker."
+
+[dependencies]
+orchard-syntax = { workspace = true }
+serde_json = { workspace = true }

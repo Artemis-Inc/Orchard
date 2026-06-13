@@ -1,0 +1,61 @@
+#!orchard 3.0
+
+//
+// coder.orch — a local development helper with gated shell access.
+//
+//     mkdir -p workspace && orch run examples/2.0/coder.orch -t "summarize the git history here"
+//
+// The interesting part is the shell-gating model. Shell execution is OFF by
+// default (policy.allow_shell: never). This file sets it to `ask`, so EVERY
+// command — whether from the `shell` pack's run_command or the declared
+// git_log tool — is printed and waits for an interactive y/n before it runs.
+// The gate is enforced by the runtime, not the model: a prompt-injected or
+// confused model cannot talk its way past it. Use `always` only for agents
+// whose inputs you fully trust.
+agent Sprout {
+    model { provider: anthropic, name: "claude-sonnet-4-6" }
+
+    persona {
+        tone: "terse, pragmatic"
+        traits: ["careful", "explicit"]
+        instructions: """
+            Before running any shell command, say what it does in one line.
+            Never run destructive commands (rm, force-push, reset --hard)
+            unless asked for that exact operation.
+        """
+    }
+
+    // File access, sandboxed to ./workspace by realpath containment — symlinks
+    // can't escape the root. `files` is the only pack that takes options.
+    use files { root: "./workspace" }
+
+    // The generic run_command tool. Gated by policy.allow_shell below.
+    use shell
+
+    // A declared shell tool: one specific command shape the model invokes by
+    // name. On substitution {dir} is shell-quoted, so a value like "; rm -rf /"
+    // stays one harmless argument. Still gated by allow_shell. A tool body may
+    // use shell()/http but never gen/delegate/state — it is a pure effect.
+    tool git_log(dir: str) -> str {
+        shell("git -C {dir} log --oneline -n 10")
+    }
+
+    // A PURE tool: no shell, no network — just computation over its argument.
+    // It runs in-process and is NOT gated by allow_shell, because it can't
+    // touch the filesystem or network. (Its body returns its trailing value.)
+    tool count_lines(text: str) -> int {
+        return text.split("\n").length
+    }
+
+    policy {
+        // `ask` = interactive y/n per command — the safe default for dev
+        // helpers: you keep the convenience of shell tools and stay in the loop
+        // on every invocation. `never` (the default) refuses all shell;
+        // `always` runs without confirmation (trusted inputs only).
+        allow_shell: ask
+    }
+
+    on message(text: str) -> str {
+        return delegate text
+    }
+}

@@ -1,0 +1,33 @@
+[package]
+name = "orchard-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Orchard 3.0 runtime: value model, tree-walking engine, the two verbs, memory/store, embeddings, policy/safety, tools, MCP, providers, executor."
+
+[features]
+default = ["native"]
+# Native: tokio multi-thread executor, reqwest (rustls) HTTP, redb store.
+native = ["dep:tokio", "dep:reqwest", "dep:redb"]
+# WASM: cooperative executor + in-memory store + fetch HTTP (wired in P17).
+wasm = []
+
+[dependencies]
+orchard-syntax = { workspace = true }
+orchard-types = { workspace = true }
+orchard-ir = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rust_decimal = { workspace = true }
+indexmap = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+sha2 = { workspace = true }
+regex = { workspace = true }
+url = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+redb = { workspace = true, optional = true }

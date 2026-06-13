@@ -1,0 +1,15 @@
+[package]
+name = "orchard-py"
+version = "3.0.0"
+edition = "2021"
+license = "MIT"
+description = "Python bindings for Orchard 3.0 (PyO3)."
+
+[lib]
+name = "orchard"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+orchard = { path = "../orchard" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+pyo3 = { version = "0.22", features = ["abi3-py38", "extension-module"] }

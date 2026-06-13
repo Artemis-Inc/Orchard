@@ -1,0 +1,68 @@
+#!orchard 2.0
+
+//
+// pipeline.orch — the agent-native control-flow showcase. The "wow" file.
+//
+//     orch run examples/2.0/pipeline.orch --skill plan requests="login is broken; tidy the README; investigate the slow query"
+//
+// Why a custom language? Because of THIS shape: ordinary, deterministic control
+// flow (for / if / match) wrapping the agent verbs (gen, gen as T, retry…until,
+// budget, delegate). You write the orchestration; the model fills the typed
+// holes; the checker proves the routing is exhaustive and the budgets only
+// tighten. None of it is string-parsing model prose.
+// Top-level types are shared by every agent in the file.
+enum Priority { trivial, normal, urgent, blocker }
+
+type Task {
+    title: str
+    priority: Priority
+    needs_research: bool
+}
+
+agent Pipeline {
+    model { provider: anthropic, name: "claude-sonnet-4-6" }
+
+    use web
+
+    policy { max_spend: $1.00, max_steps: 20 }
+
+    // Turn a list of raw request lines into typed, prioritized, optionally
+    // researched tasks, then a standup. The semicolon-free body reads like code
+    // because it IS code.
+    skill plan(requests: list<str>) -> str {
+        var report: list<str> = []
+        for raw in requests {
+            // 1) CONSTRAINED + RELIABLE. `gen as Task` guarantees the shape;
+            //    `retry … until` re-runs the block until the value is good
+            //    enough (or the cap is hit) and returns the last value. The
+            //    `until` predicate sees the produced value `t`.
+            let task = retry(3) {
+                gen as Task "Turn this request into a structured task: {raw}"
+            } until (t) => t.title != ""
+            // 2) DETERMINISTIC ROUTING over the enum. The checker makes this
+            //    match exhaustive — drop an arm and `orch check` fails.
+            let routed = match task.priority {
+                blocker => "ESCALATE"
+                urgent => "today"
+                normal => "this week"
+                trivial => "backlog"
+            }
+            // 3) SPEND ONLY WHEN ASKED. Research is an autonomous span, but
+            //    only for tasks that need it, and each span is capped tight by
+            //    a nested `budget` (it can only tighten the outer policy).
+            var note = "—"
+            if task.needs_research {
+                note = budget(spend: $0.20, steps: 6) {
+                    delegate "Research and summarize in 3 bullets with sources: {task.title}" with { tools: [web_search, fetch_page] }
+                }
+            }
+            report = report + ["[{routed}] {task.title}\n{note}"]
+        }
+        // 4) One final synthesis pass — a plain, unconstrained `gen`.
+        return gen "Write a concise standup from these planned items:\n{report}"
+    }
+
+    on message(text: str) -> str {
+        return delegate text
+    }
+}

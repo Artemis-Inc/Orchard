@@ -1,0 +1,91 @@
+#!orchard 2.0
+
+//
+// assistant.orch — a friendly, general-purpose assistant.
+//
+// This is the best first .orch file to read: every section is commented.
+// Run it (needs an Anthropic key, or an OpenAI key for the fallback):
+//
+//     orch run examples/2.0/assistant.orch
+//
+// No key at all? Start with demo-offline.orch or ollama-local.orch instead.
+//
+// An Orchard 2.0 file is a real program, not YAML. It begins with a version
+// pragma and declares one `agent`. Inside the agent, *declarative* blocks
+// (model/persona/memory) describe what the agent IS, and *behavior* members
+// (skill/on) describe what it DOES.
+agent Aster {
+    // -- model -------------------------------------------------------------
+    // Which model powers the agent. The API key is read from the provider's
+    // standard env var (ANTHROPIC_API_KEY) — no key material lives in the file.
+    // If Anthropic is unreachable after retries, the runtime falls back, in
+    // order, to the next entry.
+    model {
+        provider: anthropic
+        // anthropic|openai|ollama|groq|together|openrouter|mock
+        name: "claude-sonnet-4-6"
+        fallback: [{ provider: openai, name: "gpt-5.2" }]
+    }
+
+    // -- persona -----------------------------------------------------------
+    // Personality is compiled deterministically into the system prompt.
+    // Entirely optional — delete this block and Aster still runs.
+    persona {
+        tone: "warm, encouraging, plain-spoken"
+        traits: ["helpful", "honest", "curious"]
+        instructions: """
+            Keep answers short unless asked to go deeper.
+            When the user shares a lasting preference or fact about themselves,
+            use `remember` so it survives across runs.
+        """
+    }
+
+    // -- memory ------------------------------------------------------------
+    // Memory is one embedded SQLite file the runtime manages (here:
+    // Aster.orchmem, created next to this file). Two layers are on:
+    //   conversation — chat history persists; the last `window` messages are
+    //                  replayed into context on the next run.
+    //   facts        — durable key/value facts the model manages with the
+    //                  remember/recall/forget tools, digested into every prompt.
+    memory {
+        conversation { enabled: true, window: 40 }
+        facts: true
+    }
+
+    // -- tool packs --------------------------------------------------------
+    // Each `use` line adds ready-made tools the model can call:
+    //   calculator — exact arithmetic (models are bad at math; this isn't)
+    //   time       — the current date and time
+    use calculator
+
+    use time
+
+    // -- skills ------------------------------------------------------------
+    // A `skill` is a named procedure. It is callable from code, exposed to the
+    // model as a tool during `delegate` (here: skill_brief, skill_define), and
+    // runnable from the CLI:  orch run assistant.orch --skill define term=monad
+    //
+    // `gen` is a single, self-contained model call — you orchestrate it. It
+    // sees only the system prompt + persona, never the chat window, so it stays
+    // a controlled step. (Compare `delegate` below, where the MODEL orchestrates.)
+    skill brief() -> str {
+        // recall returns a map of the facts matching the query.
+        let known = recall("preferences")
+        return gen "Write a short, friendly check-in for the user. Things I know about them: {known}"
+    }
+
+    skill define(term: str) -> str {
+        return gen "Define '{term}' in two plain sentences a beginner would understand."
+    }
+
+    // -- triggers ----------------------------------------------------------
+    // `on message` is the interactive chat handler. `delegate` hands the user's
+    // message to the full autonomous tool loop (perceive -> think -> act), which
+    // may call the calculator, time, memory, and the skills above on its own.
+    //
+    // Note: a handler must `return` (or `reply`) its response — a bare trailing
+    // expression is not auto-returned for handlers.
+    on message(text: str) -> str {
+        return delegate text
+    }
+}

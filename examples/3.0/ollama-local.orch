@@ -1,0 +1,39 @@
+#!orchard 3.0
+
+//
+// ollama-local.orch — fully local, fully free. No API key, no cloud.
+//
+//     ollama serve              # start the local server (leave it running)
+//     ollama pull qwen3         # one-time model download
+//     orch run examples/2.0/ollama-local.orch -t "what is 19 * 23?"
+//
+// Ollama serves models on your own machine (http://localhost:11434), so there
+// is no key to set and nothing leaves your computer: the model, the
+// conversation, and the SQLite memory store are all local. If you see a
+// connection error, Ollama isn't running — start it with `ollama serve`.
+// `orch doctor` confirms it's reachable.
+agent Pip {
+    // provider: ollama needs no api_key — Ollama has no auth.
+    model { provider: ollama, name: "qwen3" }
+
+    persona {
+        tone: "cheerful, concise"
+        instructions: """
+            You run on a small local model — be upfront that you can be wrong,
+            and use the calculator tool for any arithmetic.
+        """
+    }
+
+    memory {
+        conversation { enabled: true }
+        facts: true
+    }
+
+    use calculator
+
+    use time
+
+    on message(text: str) -> str {
+        return delegate text
+    }
+}

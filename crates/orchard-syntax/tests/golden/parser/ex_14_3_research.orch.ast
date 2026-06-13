@@ -1,0 +1,280 @@
+{
+  "pragma": "2.0",
+  "items": [
+    {
+      "Agent": {
+        "name": "Lead",
+        "members": [
+          {
+            "Config": {
+              "name": "model",
+              "settings": [
+                {
+                  "KeyValue": {
+                    "key": "provider",
+                    "value": {
+                      "kind": {
+                        "Ident": "anthropic"
+                      }
+                    }
+                  }
+                },
+                {
+                  "KeyValue": {
+                    "key": "name",
+                    "value": {
+                      "kind": {
+                        "Literal": {
+                          "Str": "claude-sonnet-4-6"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "Use": {
+              "form": "Pack",
+              "name": "web",
+              "target": null,
+              "options": null
+            }
+          },
+          {
+            "Skill": {
+              "kind": "Skill",
+              "name": "survey",
+              "params": [
+                {
+                  "name": "topic",
+                  "ty": {
+                    "name": "str",
+                    "args": [],
+                    "optional": false
+                  },
+                  "default": null
+                }
+              ],
+              "return_type": {
+                "name": "str",
+                "args": [],
+                "optional": false
+              },
+              "body": {
+                "stmts": [
+                  {
+                    "kind": {
+                      "Bind": {
+                        "name": "angles",
+                        "ty": null,
+                        "value": {
+                          "kind": {
+                            "Gen": {
+                              "as_type": {
+                                "name": "list",
+                                "args": [
+                                  {
+                                    "name": "str",
+                                    "args": [],
+                                    "optional": false
+                                  }
+                                ],
+                                "optional": false
+                              },
+                              "prompt": {
+                                "kind": {
+                                  "InterpString": [
+                                    {
+                                      "Chunk": "Three distinct research angles on: "
+                                    },
+                                    {
+                                      "Expr": {
+                                        "kind": {
+                                          "Ident": "topic"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "with_config": null
+                            }
+                          }
+                        },
+                        "mutable": false
+                      }
+                    }
+                  },
+                  {
+                    "kind": {
+                      "Bind": {
+                        "name": "findings",
+                        "ty": {
+                          "name": "list",
+                          "args": [
+                            {
+                              "name": "str",
+                              "args": [],
+                              "optional": false
+                            }
+                          ],
+                          "optional": false
+                        },
+                        "value": {
+                          "kind": {
+                            "ListLit": []
+                          }
+                        },
+                        "mutable": true
+                      }
+                    }
+                  },
+                  {
+                    "kind": {
+                      "For": {
+                        "var": "angle",
+                        "iter": {
+                          "kind": {
+                            "Ident": "angles"
+                          }
+                        },
+                        "body": {
+                          "stmts": [
+                            {
+                              "kind": {
+                                "Bind": {
+                                  "name": "f",
+                                  "ty": null,
+                                  "value": {
+                                    "kind": {
+                                      "Budget": {
+                                        "args": [
+                                          {
+                                            "label": "spend",
+                                            "value": {
+                                              "kind": {
+                                                "Literal": {
+                                                  "Money": "0.20"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ],
+                                        "body": {
+                                          "stmts": [
+                                            {
+                                              "kind": {
+                                                "Expr": {
+                                                  "kind": {
+                                                    "Delegate": {
+                                                      "goal": {
+                                                        "kind": {
+                                                          "InterpString": [
+                                                            {
+                                                              "Chunk": "Research this angle and cite sources: "
+                                                            },
+                                                            {
+                                                              "Expr": {
+                                                                "kind": {
+                                                                  "Ident": "angle"
+                                                                }
+                                                              }
+                                                            }
+                                                          ]
+                                                        }
+                                                      },
+                                                      "with_config": null
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mutable": false
+                                }
+                              }
+                            },
+                            {
+                              "kind": {
+                                "Assign": {
+                                  "target": {
+                                    "kind": {
+                                      "Ident": "findings"
+                                    }
+                                  },
+                                  "op": "=",
+                                  "value": {
+                                    "kind": {
+                                      "BinOp": {
+                                        "op": "+",
+                                        "left": {
+                                          "kind": {
+                                            "Ident": "findings"
+                                          }
+                                        },
+                                        "right": {
+                                          "kind": {
+                                            "ListLit": [
+                                              {
+                                                "kind": {
+                                                  "Ident": "f"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "kind": {
+                      "Return": {
+                        "kind": {
+                          "Gen": {
+                            "as_type": null,
+                            "prompt": {
+                              "kind": {
+                                "InterpString": [
+                                  {
+                                    "Chunk": "Synthesize these findings into a brief:\n"
+                                  },
+                                  {
+                                    "Expr": {
+                                      "kind": {
+                                        "Ident": "findings"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "with_config": null
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "annotations": []
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

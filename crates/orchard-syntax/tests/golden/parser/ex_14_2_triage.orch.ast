@@ -1,0 +1,556 @@
+{
+  "pragma": "2.0",
+  "items": [
+    {
+      "Agent": {
+        "name": "Triage",
+        "members": [
+          {
+            "Config": {
+              "name": "model",
+              "settings": [
+                {
+                  "KeyValue": {
+                    "key": "provider",
+                    "value": {
+                      "kind": {
+                        "Ident": "anthropic"
+                      }
+                    }
+                  }
+                },
+                {
+                  "KeyValue": {
+                    "key": "name",
+                    "value": {
+                      "kind": {
+                        "Literal": {
+                          "Str": "claude-sonnet-4-6"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "Use": {
+              "form": "Pack",
+              "name": "web",
+              "target": null,
+              "options": null
+            }
+          },
+          {
+            "Config": {
+              "name": "memory",
+              "settings": [
+                {
+                  "KeyValue": {
+                    "key": "facts",
+                    "value": {
+                      "kind": {
+                        "Literal": {
+                          "Bool": true
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "Enum": {
+              "name": "Severity",
+              "variants": [
+                {
+                  "name": "low",
+                  "params": []
+                },
+                {
+                  "name": "medium",
+                  "params": []
+                },
+                {
+                  "name": "high",
+                  "params": []
+                },
+                {
+                  "name": "critical",
+                  "params": []
+                }
+              ]
+            }
+          },
+          {
+            "Type": {
+              "name": "Ticket",
+              "fields": [
+                {
+                  "name": "title",
+                  "ty": {
+                    "name": "str",
+                    "args": [],
+                    "optional": false
+                  },
+                  "default": null
+                },
+                {
+                  "name": "severity",
+                  "ty": {
+                    "name": "Severity",
+                    "args": [],
+                    "optional": false
+                  },
+                  "default": null
+                },
+                {
+                  "name": "summary",
+                  "ty": {
+                    "name": "str",
+                    "args": [],
+                    "optional": false
+                  },
+                  "default": null
+                }
+              ]
+            }
+          },
+          {
+            "Tool": {
+              "kind": "Tool",
+              "name": "post_to_slack",
+              "params": [
+                {
+                  "name": "channel",
+                  "ty": {
+                    "name": "str",
+                    "args": [],
+                    "optional": false
+                  },
+                  "default": null
+                },
+                {
+                  "name": "text",
+                  "ty": {
+                    "name": "str",
+                    "args": [],
+                    "optional": false
+                  },
+                  "default": null
+                }
+              ],
+              "return_type": {
+                "name": "json",
+                "args": [],
+                "optional": false
+              },
+              "body": {
+                "stmts": [
+                  {
+                    "kind": {
+                      "Expr": {
+                        "kind": {
+                          "Call": {
+                            "callee": {
+                              "kind": {
+                                "Member": {
+                                  "obj": {
+                                    "kind": {
+                                      "Ident": "http"
+                                    }
+                                  },
+                                  "name": "post",
+                                  "optional": false
+                                }
+                              }
+                            },
+                            "args": [
+                              {
+                                "label": null,
+                                "value": {
+                                  "kind": {
+                                    "Literal": {
+                                      "Str": "https://slack.example/api/post"
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "label": "body",
+                                "value": {
+                                  "kind": {
+                                    "ConfigLit": {
+                                      "type_name": null,
+                                      "fields": [
+                                        {
+                                          "name": "channel",
+                                          "value": {
+                                            "kind": {
+                                              "Ident": "channel"
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "text",
+                                          "value": {
+                                            "kind": {
+                                              "Ident": "text"
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "annotations": []
+            }
+          },
+          {
+            "Skill": {
+              "kind": "Skill",
+              "name": "triage",
+              "params": [
+                {
+                  "name": "report",
+                  "ty": {
+                    "name": "str",
+                    "args": [],
+                    "optional": false
+                  },
+                  "default": null
+                }
+              ],
+              "return_type": {
+                "name": "Ticket",
+                "args": [],
+                "optional": false
+              },
+              "body": {
+                "stmts": [
+                  {
+                    "kind": {
+                      "Bind": {
+                        "name": "t",
+                        "ty": null,
+                        "value": {
+                          "kind": {
+                            "Gen": {
+                              "as_type": {
+                                "name": "Ticket",
+                                "args": [],
+                                "optional": false
+                              },
+                              "prompt": {
+                                "kind": {
+                                  "InterpString": [
+                                    {
+                                      "Chunk": "Extract a ticket from this report:\n"
+                                    },
+                                    {
+                                      "Expr": {
+                                        "kind": {
+                                          "Ident": "report"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "with_config": null
+                            }
+                          }
+                        },
+                        "mutable": false
+                      }
+                    }
+                  },
+                  {
+                    "kind": {
+                      "Expr": {
+                        "kind": {
+                          "Match": {
+                            "subject": {
+                              "kind": {
+                                "Member": {
+                                  "obj": {
+                                    "kind": {
+                                      "Ident": "t"
+                                    }
+                                  },
+                                  "name": "severity",
+                                  "optional": false
+                                }
+                              }
+                            },
+                            "arms": [
+                              {
+                                "pattern": {
+                                  "kind": {
+                                    "Ident": "critical"
+                                  }
+                                },
+                                "body": {
+                                  "kind": {
+                                    "Block": {
+                                      "stmts": [
+                                        {
+                                          "kind": {
+                                            "Expr": {
+                                              "kind": {
+                                                "Call": {
+                                                  "callee": {
+                                                    "kind": {
+                                                      "Ident": "post_to_slack"
+                                                    }
+                                                  },
+                                                  "args": [
+                                                    {
+                                                      "label": "channel",
+                                                      "value": {
+                                                        "kind": {
+                                                          "Literal": {
+                                                            "Str": "#oncall"
+                                                          }
+                                                        }
+                                                      }
+                                                    },
+                                                    {
+                                                      "label": "text",
+                                                      "value": {
+                                                        "kind": {
+                                                          "InterpString": [
+                                                            {
+                                                              "Chunk": "🚨 "
+                                                            },
+                                                            {
+                                                              "Expr": {
+                                                                "kind": {
+                                                                  "Member": {
+                                                                    "obj": {
+                                                                      "kind": {
+                                                                        "Ident": "t"
+                                                                      }
+                                                                    },
+                                                                    "name": "title",
+                                                                    "optional": false
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          ]
+                                                        }
+                                                      }
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "kind": {
+                                            "Remember": {
+                                              "key": {
+                                                "Expr": {
+                                                  "kind": {
+                                                    "Literal": {
+                                                      "Str": "last_critical"
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              "value": {
+                                                "kind": {
+                                                  "Member": {
+                                                    "obj": {
+                                                      "kind": {
+                                                        "Ident": "t"
+                                                      }
+                                                    },
+                                                    "name": "title",
+                                                    "optional": false
+                                                  }
+                                                }
+                                              },
+                                              "auto_key": false
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "pattern": {
+                                  "kind": {
+                                    "Ident": "high"
+                                  }
+                                },
+                                "body": {
+                                  "kind": {
+                                    "Call": {
+                                      "callee": {
+                                        "kind": {
+                                          "Ident": "post_to_slack"
+                                        }
+                                      },
+                                      "args": [
+                                        {
+                                          "label": "channel",
+                                          "value": {
+                                            "kind": {
+                                              "Literal": {
+                                                "Str": "#triage"
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "label": "text",
+                                          "value": {
+                                            "kind": {
+                                              "Member": {
+                                                "obj": {
+                                                  "kind": {
+                                                    "Ident": "t"
+                                                  }
+                                                },
+                                                "name": "title",
+                                                "optional": false
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "pattern": {
+                                  "kind": "Wildcard"
+                                },
+                                "body": {
+                                  "kind": {
+                                    "Block": {
+                                      "stmts": []
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "kind": {
+                      "Return": {
+                        "kind": {
+                          "Ident": "t"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "annotations": []
+            }
+          },
+          {
+            "On": {
+              "kind": "Message",
+              "param": {
+                "name": "text",
+                "ty": {
+                  "name": "str",
+                  "args": [],
+                  "optional": false
+                },
+                "default": null
+              },
+              "schedule_kind": "",
+              "schedule_value": null,
+              "watch_path": null,
+              "return_type": {
+                "name": "str",
+                "args": [],
+                "optional": false
+              },
+              "body": {
+                "stmts": [
+                  {
+                    "kind": {
+                      "Return": {
+                        "kind": {
+                          "Budget": {
+                            "args": [
+                              {
+                                "label": "spend",
+                                "value": {
+                                  "kind": {
+                                    "Literal": {
+                                      "Money": "0.10"
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "label": "steps",
+                                "value": {
+                                  "kind": {
+                                    "Literal": {
+                                      "Int": 6
+                                    }
+                                  }
+                                }
+                              }
+                            ],
+                            "body": {
+                              "stmts": [
+                                {
+                                  "kind": {
+                                    "Expr": {
+                                      "kind": {
+                                        "Delegate": {
+                                          "goal": {
+                                            "kind": {
+                                              "Ident": "text"
+                                            }
+                                          },
+                                          "with_config": null
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
