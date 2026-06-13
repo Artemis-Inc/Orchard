@@ -26,11 +26,11 @@ class Orchard < Formula
   on_linux do
     on_arm do
       url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.0.0/orch-3.0.0-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "REPLACE_WITH_LINUX_ARM64_SHA256"
+      sha256 "3a7684180e012b2dddf8df2f4a032d0c4b14178b024a05799143922b47cf8b3a"
     end
     on_intel do
       url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.0.0/orch-3.0.0-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "REPLACE_WITH_LINUX_X86_64_SHA256"
+      sha256 "e49989ab46f0588e0023ce43cd75f0e6d78c67c02feb1c75bea517b537df61d9"
     end
   end
 
