@@ -5,7 +5,7 @@
 #
 # Downloads the `orch` CLI for your platform from GitHub Releases and installs it
 # to ~/.orchard/bin. Override with:
-#   ORCHARD_VERSION=3.0.0   pin a version (default: latest release)
+#   ORCHARD_VERSION=3.1.0   pin a version (default: latest release)
 #   ORCHARD_INSTALL_DIR=... install location (default: $HOME/.orchard/bin)
 set -eu
 

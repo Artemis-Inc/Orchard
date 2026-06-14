@@ -4,7 +4,7 @@
 #
 # Downloads the `orch` CLI from GitHub Releases and installs it to
 # %LOCALAPPDATA%\Orchard\bin, then adds that folder to your user PATH.
-# Override the version with:  $env:ORCHARD_VERSION = "3.0.0"
+# Override the version with:  $env:ORCHARD_VERSION = "3.1.0"
 
 $ErrorActionPreference = "Stop"
 $Repo = "Artemis-Inc/Orchard"
