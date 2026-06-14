@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### The agent terminal (`orch run`)
+- `orch run` is now a live agent terminal. An entrance banner shows the agent,
+  its model, and the working directory; typing `/` opens a palette of the
+  agent's skills and tools; and the whole pipeline streams as the agent works
+  (model calls, tool calls and their results, `emit` output, token counts, an
+  animated spinner). On a real terminal it runs a rich raw-mode UI; when piped it
+  falls back to clean line streaming. `-t` and `--skill` are unchanged.
+- New runtime event stream: `RuntimeBuilder::on_event` observes the live pipeline
+  via `AgentEvent` (model start/end with usage, tool start/end, `emit`, task
+  complete). The same events power the TUI and can drive any host UI.
+- `orch new` now scaffolds a capable, commented starter agent that grants tools
+  and runs offline. Added `examples/3.0/atlas.orch`, a flagship agent granted
+  files, shell, web, HTTP, and math, with skills and a safety policy.
+
 ## 3.0.0 — A Rust rewrite
 
 Orchard 3.0 is a from-scratch Rust reimplementation of the Orchard agent

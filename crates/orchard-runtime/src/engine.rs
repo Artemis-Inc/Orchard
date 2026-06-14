@@ -440,8 +440,11 @@ impl Engine {
                     Ok(Flow::Reply(v))
                 }
                 "emit" => {
-                    let _v = val!(self, &node["value"], env);
-                    // streamed output; surfaced via events in the facade later.
+                    let v = val!(self, &node["value"], env);
+                    // Intermediate streamed output, surfaced to the host's event sink.
+                    self.runtime.emit_event(crate::events::AgentEvent::Emit {
+                        text: self.runtime.env.redact(&v.to_text()),
+                    });
                     Ok(Flow::null())
                 }
                 "halt" => {
@@ -1919,6 +1922,12 @@ impl Engine {
                 max_tokens: maxt,
                 schema: None,
             };
+            self.runtime.emit_event(crate::events::AgentEvent::ModelStart {
+                model: self.runtime.model_name.clone(),
+                messages: messages.len(),
+                tools: tooldefs.len(),
+                kind: crate::events::ModelKind::Delegate,
+            });
             let resp = self
                 .runtime
                 .provider
@@ -1937,6 +1946,14 @@ impl Engine {
                 resp.output_tokens,
             );
             let text = self.runtime.env.redact(&resp.text);
+            self.runtime.emit_event(crate::events::AgentEvent::ModelEnd {
+                model: model.clone(),
+                input_tokens: resp.input_tokens,
+                output_tokens: resp.output_tokens,
+                stop_reason: resp.stop_reason.clone(),
+                tool_calls: resp.tool_calls.len(),
+                text: text.clone(),
+            });
 
             if resp.tool_calls.is_empty() {
                 if top {
@@ -1967,9 +1984,26 @@ impl Engine {
                         .and_then(|r| r.as_str())
                         .map(|s| s.to_string())
                         .unwrap_or_default();
+                    self.runtime
+                        .emit_event(crate::events::AgentEvent::TaskComplete {
+                            result: result.clone(),
+                        });
                     return Ok(result);
                 }
+                self.runtime.emit_event(crate::events::AgentEvent::ToolStart {
+                    id: call.id.clone(),
+                    name: call.name.clone(),
+                    args: call.args.clone().unwrap_or(serde_json::Value::Null),
+                });
+                let tool_t0 = std::time::Instant::now();
                 let output = self.dispatch_exposed(call, &dispatch).await?;
+                self.runtime.emit_event(crate::events::AgentEvent::ToolEnd {
+                    id: call.id.clone(),
+                    name: call.name.clone(),
+                    ok: true,
+                    output: output.clone(),
+                    ms: tool_t0.elapsed().as_millis() as u64,
+                });
                 messages.push(Message {
                     role: "tool".into(),
                     content: output,

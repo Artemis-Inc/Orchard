@@ -32,9 +32,18 @@ pub struct AgentRuntime {
     pub allow_shell: String,
     /// Whether the run is interactive (for `allow_shell: ask`).
     pub interactive: bool,
+    /// Optional real-time event observer (the `orch` TUI installs one).
+    pub events: Option<crate::events::EventSink>,
 }
 
 impl AgentRuntime {
+    /// Fire a real-time event to the installed sink, if any.
+    pub fn emit_event(&self, ev: crate::events::AgentEvent) {
+        if let Some(sink) = &self.events {
+            (sink)(ev);
+        }
+    }
+
     /// Build the system prompt. With `for_gen`, only persona is included (no
     /// fact digest, remember instruction, or skills listing).
     pub fn system_prompt(&self, _for_gen: bool) -> String {
@@ -163,12 +172,18 @@ impl AgentRuntime {
         });
         let req = ChatRequest {
             system: self.system_prompt(true),
-            messages,
+            messages: messages.clone(),
             tools: vec![],
             temperature: temp,
             max_tokens: maxt,
             schema,
         };
+        self.emit_event(crate::events::AgentEvent::ModelStart {
+            model: self.model_name.clone(),
+            messages: messages.len(),
+            tools: 0,
+            kind: crate::events::ModelKind::Gen,
+        });
         let resp = self
             .provider
             .chat(req)
@@ -185,6 +200,15 @@ impl AgentRuntime {
             resp.input_tokens,
             resp.output_tokens,
         );
-        Ok(self.env.redact(&resp.text))
+        let out = self.env.redact(&resp.text);
+        self.emit_event(crate::events::AgentEvent::ModelEnd {
+            model,
+            input_tokens: resp.input_tokens,
+            output_tokens: resp.output_tokens,
+            stop_reason: resp.stop_reason,
+            tool_calls: 0,
+            text: out.clone(),
+        });
+        Ok(out)
     }
 }

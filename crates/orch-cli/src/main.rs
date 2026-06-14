@@ -5,6 +5,8 @@ use orchard::{Agent, Runtime, Severity};
 use std::path::Path;
 use std::process::ExitCode;
 
+mod tui;
+
 #[derive(Parser)]
 #[command(name = "orch", version = orchard::VERSION, about = "Orchard 3.0 — a language for autonomous AI agents")]
 struct Cli {
@@ -153,6 +155,11 @@ async fn cmd_run(file: &str, task: Option<String>, skill: Option<Vec<String>>) -
     if let Ok(store) = orchard_runtime::RedbStore::open(store_path(&agent, file, &base_dir)) {
         builder = builder.store(std::sync::Arc::new(store));
     }
+    // Live pipeline events for the interactive TUI.
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<orchard::AgentEvent>();
+    builder = builder.on_event(move |ev| {
+        let _ = tx.send(ev);
+    });
     let session = match builder.build() {
         Ok(s) => s,
         Err(e) => {
@@ -165,6 +172,7 @@ async fn cmd_run(file: &str, task: Option<String>, skill: Option<Vec<String>>) -
         return ExitCode::from(1);
     }
     if let Some(parts) = skill {
+        drop(rx); // non-interactive: no live pipeline UI
         let name = parts.first().cloned().unwrap_or_default();
         let mut args = serde_json::Map::new();
         for kv in parts.iter().skip(1) {
@@ -184,6 +192,7 @@ async fn cmd_run(file: &str, task: Option<String>, skill: Option<Vec<String>>) -
         };
     }
     if let Some(t) = task {
+        drop(rx); // non-interactive: no live pipeline UI
         if !session.has_handler("message") {
             eprintln!("orch: this agent has no 'on message' handler");
             return ExitCode::from(1);
@@ -199,30 +208,59 @@ async fn cmd_run(file: &str, task: Option<String>, skill: Option<Vec<String>>) -
             }
         };
     }
-    // interactive chat
-    if !session.has_handler("message") {
-        println!("This agent has no 'on message' handler; nothing to chat with.");
-        return ExitCode::SUCCESS;
-    }
-    use std::io::Write;
-    let stdin = std::io::stdin();
-    loop {
-        print!("you › ");
-        let _ = std::io::stdout().flush();
-        let mut line = String::new();
-        if stdin.read_line(&mut line).unwrap_or(0) == 0 {
-            break;
-        }
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        match session.message(line).await {
-            Ok(reply) => println!("{reply}"),
-            Err(e) => eprintln!("orch: {e}"),
-        }
-    }
+    // Interactive agent terminal (rich TUI on a tty, streaming lines when piped).
+    let manifest = agent.manifest();
+    let meta = tui::Meta {
+        agent: {
+            let n = agent.name();
+            if n.is_empty() {
+                "agent".to_string()
+            } else {
+                n.to_string()
+            }
+        },
+        description: manifest
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        provider: manifest["model"]["provider"]
+            .as_str()
+            .unwrap_or("mock")
+            .to_string(),
+        model: manifest["model"]["name"].as_str().unwrap_or("").to_string(),
+        cwd: std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
+        version: orchard::VERSION.to_string(),
+        skills: skills_of(agent.ir()),
+        tools: session.tool_names(),
+    };
+    tui::run(session, rx, meta).await;
     ExitCode::SUCCESS
+}
+
+/// Callable skills `(name, description)` for the slash palette, from the IR.
+fn skills_of(ir: &serde_json::Value) -> Vec<(String, String)> {
+    ir["agents"]
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|a0| a0["skills"].as_array())
+        .map(|skills| {
+            skills
+                .iter()
+                .filter_map(|s| {
+                    let name = s.get("name").and_then(|v| v.as_str())?;
+                    let desc = s
+                        .get("description")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    Some((name.to_string(), desc))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn coerce_arg(v: &str) -> serde_json::Value {
@@ -266,12 +304,69 @@ fn cmd_fmt(file: &str, check: bool) -> ExitCode {
     }
 }
 
+const STARTER: &str = r#"#!orchard 3.0
+
+// A capable starter agent. It runs offline as-is (the `mock` provider needs no
+// key); swap the model block for a real one to make it think for real:
+//
+//     model { provider: anthropic, name: "claude-opus-4-8" }
+//
+// Run it:   orch run __NAME_LOWER__.orch
+// Inside the chat, type `/` to see this agent's skills and tools.
+agent __NAME__ {
+    model { provider: mock, name: "echo" }
+
+    persona {
+        tone: "warm, direct, concrete"
+        instructions: """
+            Be concise. Use your tools to get real answers instead of guessing.
+            Say in one line what you are about to do before you run a command.
+        """
+    }
+
+    memory {
+        conversation { enabled: true, window: 40 }
+        facts: true
+    }
+
+    // Capabilities. Each `use` grants the agent a set of tools it can call on
+    // its own during `delegate`. Uncomment to grant more power; the `policy`
+    // block below is the safety envelope.
+    use calculator              // exact arithmetic
+    use time                    // the current date and time
+    // use files { root: "." }  // read, write, and list files under a folder
+    // use web                  // fetch and read web pages
+    // use http                 // call HTTP APIs
+    // use shell                // run shell commands (full computer access)
+
+    // A skill is a model-using procedure you can call from the chat with
+    // `/summarize`, or that the agent can call on its own.
+    skill summarize(text: str) -> str {
+        return gen "Summarize this in three short bullet points:\n{text}"
+    }
+
+    policy {
+        // Shell starts OFF. Set `ask` to confirm each command interactively, or
+        // `always` for trusted inputs. `max_spend` caps a real-model run.
+        allow_shell: never
+        max_steps: 25
+        max_spend: $1.00
+    }
+
+    on message(text: str) -> str {
+        // `delegate` hands the goal to the autonomous loop over the tools and
+        // skills above. Watch the pipeline stream in the terminal as it works.
+        return delegate text
+    }
+}
+"#;
+
 fn cmd_new(name: &str) -> ExitCode {
     let camel = to_upper_camel(name);
     let path = format!("{name}.orch");
-    let template = format!(
-        "#!orchard 3.0\n\nagent {camel} {{\n    model {{ provider: mock, name: \"echo\" }}   // swap in anthropic + a real model + an API key\n    memory {{ facts: true }}\n\n    on message(text: str) -> str {{\n        return gen \"Reply briefly and kindly to: {{text}}\"\n    }}\n}}\n"
-    );
+    let template = STARTER
+        .replace("__NAME_LOWER__", name)
+        .replace("__NAME__", &camel);
     if Path::new(&path).exists() {
         eprintln!("orch: {path} already exists");
         return ExitCode::from(1);

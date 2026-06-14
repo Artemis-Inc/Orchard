@@ -1,0 +1,84 @@
+#!orchard 3.0
+
+//
+// atlas.orch — a capable autonomous engineering and research agent.
+//
+//     orch run examples/3.0/atlas.orch
+//
+// Atlas is granted real capabilities: it can read and write files in the
+// current project, run shell commands (gated, confirmed per command), fetch and
+// read the web, and do exact math. Inside the chat, type `/` to see its skills
+// and tools, and watch the pipeline stream as it works. It needs a real model
+// (set ANTHROPIC_API_KEY) to do useful work; everything around the model runs
+// for real either way.
+agent Atlas {
+    model {
+        provider: anthropic
+        name: "claude-opus-4-8"
+        fallback: [{ provider: openai, name: "gpt-5.2" }]
+    }
+
+    persona {
+        tone: "precise, calm, hands-on"
+        traits: ["thorough", "careful", "honest about uncertainty"]
+        instructions: """
+            Work in small, verifiable steps. Before running a command or editing
+            a file, say in one line what you are about to do and why.
+            Prefer reading code and files over guessing. When you research on the
+            web, cite the page you used. Never run destructive commands (rm,
+            force-push, reset --hard) unless asked for that exact operation.
+            When the user states a lasting preference, use remember so it
+            survives across runs.
+        """
+    }
+
+    memory {
+        conversation { enabled: true, window: 40 }
+        facts: true
+    }
+
+    // -- capabilities ------------------------------------------------------
+    use files { root: "." }   // read, write, and list files in this project
+    use shell                 // run shell commands (gated by policy below)
+    use web                   // fetch and read web pages
+    use http                  // call HTTP APIs
+    use calculator            // exact arithmetic
+    use time                  // current date and time
+
+    // A declared shell tool: one specific, safe command shape. On substitution
+    // {dir} is shell-quoted, so an argument can never break out into a new
+    // command. Still gated by allow_shell.
+    tool git_status(dir: str) -> str {
+        shell("git -C {dir} status --short --branch")
+    }
+
+    // A pure tool: computation only, no shell or network, so it is never gated.
+    tool count_lines(text: str) -> int {
+        return text.split("\n").length
+    }
+
+    // -- skills (callable from the chat with /plan and /review) -------------
+    skill plan(goal: str) -> str {
+        return gen "Break this goal into a short, ordered checklist of concrete steps:\n{goal}"
+    }
+
+    skill review(code: str) -> str {
+        return gen "Review this code for correctness and clarity. List concrete issues, most important first:\n{code}"
+    }
+
+    policy {
+        // `ask` prints every command and waits for y/n. Use `always` only for
+        // inputs you fully trust. `never` (the default) refuses all shell.
+        allow_shell: ask
+        // Only let the web tools reach these hosts.
+        allowed_domains: ["docs.rs", "github.com", "raw.githubusercontent.com"]
+        max_steps: 30
+        max_tool_calls: 60
+        max_spend: $2.00
+    }
+
+    on message(text: str) -> str {
+        // Hand the goal to the autonomous loop over every tool and skill above.
+        return delegate text
+    }
+}

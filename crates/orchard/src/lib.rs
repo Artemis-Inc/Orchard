@@ -14,7 +14,7 @@ use orchard_runtime::{
 };
 use serde_json::Value as Json;
 
-pub use orchard_runtime::{NativeTool, Value};
+pub use orchard_runtime::{AgentEvent, EventSink, ModelKind, NativeTool, Value};
 // Boundary traits + data types hosts implement/observe.
 pub use orchard_runtime::{
     ChatRequest, ChatResponse, Embedder, HttpClient, HttpRequest, HttpResponse, Message,
@@ -118,6 +118,7 @@ impl Runtime {
             unattended: false,
             native_tools: Vec::new(),
             http_client: None,
+            events: None,
         }
     }
 }
@@ -130,6 +131,7 @@ pub struct RuntimeBuilder {
     unattended: bool,
     native_tools: Vec<Arc<dyn Tool>>,
     http_client: Option<Arc<dyn orchard_runtime::HttpClientTrait>>,
+    events: Option<orchard_runtime::EventSink>,
 }
 
 impl RuntimeBuilder {
@@ -161,6 +163,16 @@ impl RuntimeBuilder {
     /// Inject a custom HTTP client (egress-guarded by default).
     pub fn http_client(mut self, http: Arc<dyn orchard_runtime::HttpClientTrait>) -> Self {
         self.http_client = Some(http);
+        self
+    }
+    /// Observe the live pipeline: model calls, tool calls and results, `emit`
+    /// output, and the final answer, as the run unfolds. This is what the `orch`
+    /// TUI renders.
+    pub fn on_event<F>(mut self, sink: F) -> Self
+    where
+        F: Fn(orchard_runtime::AgentEvent) + Send + Sync + 'static,
+    {
+        self.events = Some(Arc::new(sink));
         self
     }
 
@@ -274,6 +286,7 @@ impl RuntimeBuilder {
             http: http_client,
             allow_shell,
             interactive: !self.unattended,
+            events: self.events,
         });
         runtime.index_knowledge();
         let engine = Arc::new(Engine::new(self.agent.ir(), runtime));
@@ -315,6 +328,16 @@ impl Session {
 
     pub fn has_handler(&self, kind: &str) -> bool {
         self.engine.has_handler(kind)
+    }
+
+    /// The names of every tool the agent can call (built-in packs, MCP, native).
+    pub fn tool_names(&self) -> Vec<String> {
+        self.engine
+            .runtime
+            .tools
+            .iter()
+            .map(|t| t.name().to_string())
+            .collect()
     }
 
     /// Fire the `on schedule` handler once.

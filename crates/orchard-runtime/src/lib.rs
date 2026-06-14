@@ -15,6 +15,7 @@ pub mod cron;
 pub mod embeddings;
 pub mod engine;
 pub mod error;
+pub mod events;
 pub mod flow;
 pub mod http;
 pub mod policy;
@@ -31,6 +32,7 @@ pub use cron::{civil_from_unix, matches as cron_matches, validate as cron_valida
 pub use embeddings::{chunk_text, content_hash, semantic_search, KeywordScorer};
 pub use engine::Engine;
 pub use error::{HostError, HttpError, ProviderError, ToolError};
+pub use events::{AgentEvent, EventSink, ModelKind};
 pub use flow::Flow;
 #[cfg(feature = "native")]
 pub use http::ReqwestClient;
