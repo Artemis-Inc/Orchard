@@ -1,36 +1,37 @@
 # Homebrew formula for Orchard. This is the canonical copy; it is mirrored into
-# the tap repository (Artemis-Inc/homebrew-orchard) so users can run:
+# the tap repository (Artemis-Inc/homebrew-orchard) by the release workflow so
+# users can run:
 #
 #   brew install artemis-inc/orchard/orchard
 #
-# The sha256 values are filled in when a release is built. Until a platform's
-# binary is published, its block points at the release asset and its checksum is
-# updated by the release process.
+# Do not hand-edit the version or sha256 values: the release workflow regenerates
+# this file from the published SHA256SUMS on every tagged release
+# (see .github/workflows/release.yml and scripts/update-homebrew.sh).
 class Orchard < Formula
   desc "Typed, concurrent language for building LLM agents"
   homepage "https://github.com/Artemis-Inc/Orchard"
-  version "3.0.0"
+  version "3.1.0"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.0.0/orch-3.0.0-aarch64-apple-darwin.tar.gz"
-      sha256 "d51fb5dbdcb8128c25042bb29920a4ce869eec6e5a8591a264118e47b7372512"
+      url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.1.0/orch-3.1.0-aarch64-apple-darwin.tar.gz"
+      sha256 "68bed8490d9764c4ef8629b6390b7d92b95acd480762ad156ed00b33422977cc"
     end
     on_intel do
-      url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.0.0/orch-3.0.0-x86_64-apple-darwin.tar.gz"
-      sha256 "4ca2ed6a1563d96f129ac3c9eac16284e1d062f3e8dc2955cdab29680bfa4a2c"
+      url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.1.0/orch-3.1.0-x86_64-apple-darwin.tar.gz"
+      sha256 "15dc6facde8eadf920a2a12b0e53879e084b1e65d18474df04a71e06f909bcca"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.0.0/orch-3.0.0-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "3a7684180e012b2dddf8df2f4a032d0c4b14178b024a05799143922b47cf8b3a"
+      url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.1.0/orch-3.1.0-aarch64-unknown-linux-gnu.tar.gz"
+      sha256 "a8464c08f323c5210c68e5fcfa9038b67533fd37b650c23419162ac173c311ed"
     end
     on_intel do
-      url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.0.0/orch-3.0.0-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "e49989ab46f0588e0023ce43cd75f0e6d78c67c02feb1c75bea517b537df61d9"
+      url "https://github.com/Artemis-Inc/Orchard/releases/download/v3.1.0/orch-3.1.0-x86_64-unknown-linux-gnu.tar.gz"
+      sha256 "1aa872f04204b5bacda6686cf5ddee3e7861199ef6e827d4e746e1f79bc1841a"
     end
   end
 
