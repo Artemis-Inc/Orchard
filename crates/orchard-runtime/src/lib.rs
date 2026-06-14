@@ -51,8 +51,10 @@ pub use traits::{
 };
 pub use value::{equal, make_error, Closure, Duration, Env, Money, Scope, Value};
 
-/// The Orchard version string emitted in the IR and by `orch --version`.
-pub const ORCHARD_VERSION: &str = "3.0";
+/// The release version reported by `orch --version` and shown on the agent
+/// terminal banner. Tracks the crate version (the language spec version that
+/// goes in the `#!orchard` pragma is separate; see `orchard-ir`).
+pub const ORCHARD_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Untrusted-content sentinels wrapping external tool output and recalled memory.
 pub const SENTINEL_OPEN: &str = "<<<external>>>";

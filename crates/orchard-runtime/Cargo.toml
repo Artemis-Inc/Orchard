@@ -9,7 +9,7 @@ description = "Orchard 3.0 runtime: value model, tree-walking engine, the two ve
 [features]
 default = ["native"]
 # Native: tokio multi-thread executor, reqwest (rustls) HTTP, redb store.
-native = ["dep:tokio", "dep:reqwest", "dep:redb"]
+native = ["dep:tokio", "dep:reqwest", "dep:redb", "dep:tokio-tungstenite"]
 # WASM: cooperative executor + in-memory store + fetch HTTP (wired in P17).
 wasm = []
 
@@ -31,3 +31,4 @@ serde_yaml = { workspace = true }
 tokio = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 redb = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }

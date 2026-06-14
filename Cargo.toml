@@ -16,7 +16,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "3.0.0"
+version = "3.1.0"
 edition = "2021"
 rust-version = "1.80"
 license = "MIT"
@@ -32,12 +32,13 @@ rust_decimal = "1"
 indexmap = { version = "2", features = ["serde"] }
 # Runtime
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "io-util", "process", "fs"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip", "stream"] }
 redb = "2"
 url = "2"
 regex = "1"
 sha2 = "0.10"
 futures = "0.3"
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake"] }
 async-trait = "0.1"
 serde_yaml = "0.9"
 # CLI

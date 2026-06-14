@@ -1,0 +1,60 @@
+#!orchard 3.0
+
+//
+// scout.orch — a web research agent that drives a real browser.
+//
+//     orch run examples/3.0/scout.orch
+//
+// Scout opens pages in a real headless Chrome, so it sees content that only
+// appears after JavaScript runs (single-page apps, lazy-loaded text). It can
+// read the rendered page, click through links and buttons, type into search
+// boxes, scrape structured data with a snippet of JavaScript, and capture a
+// screenshot to a PNG. Grant browser control with one line: `use browser`.
+//
+// It needs a real model to decide what to do (set ANTHROPIC_API_KEY), but the
+// browser, the clicks, and the screenshots are all real.
+agent Scout {
+    model {
+        provider: anthropic
+        name: "claude-opus-4-8"
+    }
+
+    persona {
+        tone: "curious, concise, factual"
+        traits: ["resourceful", "skeptical of unverified claims"]
+        instructions: """
+            When asked about a page or topic, open the page in the browser and
+            read what is actually there before answering. Quote the page. If a
+            task needs interaction (search, click, paginate), do it step by step
+            and say what you did. When asked for a screenshot, save it and report
+            the path. Keep answers tight and grounded in what you saw.
+        """
+    }
+
+    memory {
+        conversation { enabled: true, window: 30 }
+        facts: true
+    }
+
+    // -- capabilities ------------------------------------------------------
+    use browser               // open / read / click / type / eval / screenshot
+    use web                   // keyless search + plain fetch, for quick lookups
+    use files { root: "." }   // save notes and screenshots into this folder
+    use time                  // timestamp findings
+
+    // A skill the chat can call directly with /summarize.
+    skill summarize(text: str) -> str {
+        return gen "Summarize the key facts from this page text in five bullet points:\n{text}"
+    }
+
+    policy {
+        // The browser reaches the open web; cap the run so it stays bounded.
+        max_steps: 40
+        max_tool_calls: 80
+        max_spend: $2.00
+    }
+
+    on message(text: str) -> str {
+        return delegate text
+    }
+}

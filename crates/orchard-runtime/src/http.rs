@@ -207,6 +207,39 @@ impl HttpClient for ReqwestClient {
         }
         Err(HttpError::new("too many redirects"))
     }
+
+    async fn request_stream(
+        &self,
+        req: HttpRequest,
+        on_chunk: &(dyn Fn(Vec<u8>) + Send + Sync),
+    ) -> Result<u16, HttpError> {
+        use futures::StreamExt;
+        let url = url::Url::parse(&req.url).map_err(|e| HttpError::new(format!("bad url: {e}")))?;
+        if req.enforce_egress {
+            check_egress(&url, &req.allowed_domains, req.allow_local)?;
+        }
+        let m = reqwest::Method::from_bytes(req.method.to_uppercase().as_bytes())
+            .unwrap_or(reqwest::Method::POST);
+        let mut builder = self.client.request(m, url);
+        for (k, v) in &req.headers {
+            builder = builder.header(k, v);
+        }
+        if let Some(b) = &req.body {
+            builder = builder.body(b.clone());
+        }
+        let resp = builder
+            .timeout(std::time::Duration::from_secs(req.timeout_secs.max(1)))
+            .send()
+            .await
+            .map_err(|e| HttpError::new(format!("request failed: {e}")))?;
+        let status = resp.status().as_u16();
+        let mut stream = resp.bytes_stream();
+        while let Some(item) = stream.next().await {
+            let bytes = item.map_err(|e| HttpError::new(format!("stream failed: {e}")))?;
+            on_chunk(bytes.to_vec());
+        }
+        Ok(status)
+    }
 }
 
 #[cfg(test)]

@@ -28,6 +28,7 @@ const PACKS: &[&str] = &[
     "calculator",
     "time",
     "web",
+    "browser",
     "memory",
 ];
 const ALWAYS_BUILTINS: &[&str] = &["env", "recall_one", "http", "shell", "state", "this"];
@@ -48,6 +49,14 @@ fn pack_tools(pack: &str) -> &'static [&'static str] {
         "calculator" => &["calculate"],
         "time" => &["current_time"],
         "web" => &["web_search", "fetch_page"],
+        "browser" => &[
+            "browser_open",
+            "browser_read",
+            "browser_click",
+            "browser_type",
+            "browser_eval",
+            "browser_screenshot",
+        ],
         "memory" => &["remember", "recall", "forget"],
         _ => &[],
     }
@@ -1428,7 +1437,7 @@ impl Checker {
                         PACKS.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
                     );
                     self.err_hint(format!("unknown tool pack '{}'", u.name), &u.span, hint);
-                } else if u.name != "files" && u.options.is_some() {
+                } else if u.name != "files" && u.name != "browser" && u.options.is_some() {
                     self.err(format!("the '{}' pack takes no options", u.name), &u.span);
                 }
             }

@@ -181,6 +181,264 @@ fn anthropic_parse(body: &Json) -> ChatResponse {
     }
 }
 
+// ---- Server-Sent Events (token streaming) ----
+
+/// Feed raw response bytes line by line, invoking `on_line` for each complete
+/// `data:` payload (the JSON after the prefix). Buffers partial lines across
+/// chunks. Returns nothing; state lives in the caller's closure.
+fn sse_pump(buf: &mut Vec<u8>, bytes: &[u8], mut on_data: impl FnMut(&str)) {
+    buf.extend_from_slice(bytes);
+    while let Some(pos) = buf.iter().position(|&c| c == b'\n') {
+        let line: Vec<u8> = buf.drain(..=pos).collect();
+        let line = String::from_utf8_lossy(&line);
+        let line = line.trim_end_matches(['\r', '\n']);
+        if let Some(data) = line.strip_prefix("data:") {
+            let data = data.trim();
+            if !data.is_empty() && data != "[DONE]" {
+                on_data(data);
+            }
+        }
+    }
+}
+
+/// One streamed content block (Anthropic), accumulated across deltas.
+#[derive(Default)]
+struct SseBlock {
+    kind: String,
+    text: String,
+    tool_id: String,
+    tool_name: String,
+    partial_json: String,
+}
+
+/// Accumulated Anthropic streaming state, finalized into a `ChatResponse`.
+#[derive(Default)]
+struct AnthropicAccum {
+    blocks: Vec<SseBlock>,
+    input_tokens: i64,
+    output_tokens: i64,
+    stop_reason: String,
+    model: String,
+}
+
+impl AnthropicAccum {
+    fn block_mut(&mut self, index: usize) -> &mut SseBlock {
+        while self.blocks.len() <= index {
+            self.blocks.push(SseBlock::default());
+        }
+        &mut self.blocks[index]
+    }
+
+    /// Apply one SSE event, calling `on_token` for visible text deltas.
+    fn apply(&mut self, ev: &Json, on_token: &(dyn Fn(String) + Send + Sync)) {
+        match ev.get("type").and_then(|t| t.as_str()) {
+            Some("message_start") => {
+                let msg = &ev["message"];
+                if let Some(it) = msg["usage"]["input_tokens"].as_i64() {
+                    self.input_tokens = it;
+                }
+                if let Some(m) = msg.get("model").and_then(|m| m.as_str()) {
+                    self.model = m.to_string();
+                }
+            }
+            Some("content_block_start") => {
+                let index = ev["index"].as_u64().unwrap_or(0) as usize;
+                let cb = &ev["content_block"];
+                let kind = cb.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                let b = self.block_mut(index);
+                b.kind = kind.to_string();
+                if kind == "tool_use" {
+                    b.tool_id = cb.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
+                    b.tool_name = cb
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                }
+            }
+            Some("content_block_delta") => {
+                let index = ev["index"].as_u64().unwrap_or(0) as usize;
+                let delta = &ev["delta"];
+                match delta.get("type").and_then(|t| t.as_str()) {
+                    Some("text_delta") => {
+                        let t = delta.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                        if !t.is_empty() {
+                            self.block_mut(index).text.push_str(t);
+                            on_token(t.to_string());
+                        }
+                    }
+                    Some("input_json_delta") => {
+                        let pj = delta
+                            .get("partial_json")
+                            .and_then(|p| p.as_str())
+                            .unwrap_or("");
+                        self.block_mut(index).partial_json.push_str(pj);
+                    }
+                    _ => {}
+                }
+            }
+            Some("message_delta") => {
+                if let Some(sr) = ev["delta"]["stop_reason"].as_str() {
+                    self.stop_reason = sr.to_string();
+                }
+                if let Some(ot) = ev["usage"]["output_tokens"].as_i64() {
+                    self.output_tokens = ot;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn finish(self, fallback_model: &str) -> ChatResponse {
+        let mut text = String::new();
+        let mut tool_calls = Vec::new();
+        let mut structured: Option<String> = None;
+        for b in &self.blocks {
+            if b.kind == "tool_use" {
+                let input: Json = serde_json::from_str(&b.partial_json).unwrap_or(json!({}));
+                if b.tool_name == STRUCTURED_TOOL {
+                    structured = Some(input.to_string());
+                } else {
+                    tool_calls.push(ToolCall {
+                        id: b.tool_id.clone(),
+                        name: b.tool_name.clone(),
+                        raw_args: input.to_string(),
+                        args: input.as_object().map(|_| input.clone()),
+                    });
+                }
+            } else {
+                text.push_str(&b.text);
+            }
+        }
+        if let Some(s) = structured {
+            text = s;
+        }
+        let model = if self.model.is_empty() {
+            fallback_model.to_string()
+        } else {
+            self.model
+        };
+        ChatResponse {
+            text,
+            tool_calls,
+            stop_reason: map_stop(Some(self.stop_reason.as_str())),
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            model,
+        }
+    }
+}
+
+/// Accumulated OpenAI-compatible streaming state.
+#[derive(Default)]
+struct OpenAiToolAccum {
+    id: String,
+    name: String,
+    args: String,
+}
+
+#[derive(Default)]
+struct OpenAiAccum {
+    text: String,
+    tools: Vec<OpenAiToolAccum>,
+    finish_reason: String,
+    input_tokens: i64,
+    output_tokens: i64,
+    model: String,
+}
+
+impl OpenAiAccum {
+    fn apply(&mut self, ev: &Json, on_token: &(dyn Fn(String) + Send + Sync)) {
+        if let Some(m) = ev.get("model").and_then(|m| m.as_str()) {
+            if self.model.is_empty() {
+                self.model = m.to_string();
+            }
+        }
+        if let Some(usage) = ev.get("usage").filter(|u| !u.is_null()) {
+            if let Some(p) = usage["prompt_tokens"].as_i64() {
+                self.input_tokens = p;
+            }
+            if let Some(c) = usage["completion_tokens"].as_i64() {
+                self.output_tokens = c;
+            }
+        }
+        let choice = match ev.get("choices").and_then(|c| c.as_array()).and_then(|c| c.first()) {
+            Some(c) => c,
+            None => return,
+        };
+        if let Some(fr) = choice.get("finish_reason").and_then(|f| f.as_str()) {
+            self.finish_reason = fr.to_string();
+        }
+        let delta = &choice["delta"];
+        if let Some(t) = delta.get("content").and_then(|c| c.as_str()) {
+            if !t.is_empty() {
+                self.text.push_str(t);
+                on_token(t.to_string());
+            }
+        }
+        if let Some(calls) = delta.get("tool_calls").and_then(|c| c.as_array()) {
+            for c in calls {
+                let idx = c["index"].as_u64().unwrap_or(0) as usize;
+                while self.tools.len() <= idx {
+                    self.tools.push(OpenAiToolAccum::default());
+                }
+                let slot = &mut self.tools[idx];
+                if let Some(id) = c.get("id").and_then(|i| i.as_str()) {
+                    if !id.is_empty() {
+                        slot.id = id.to_string();
+                    }
+                }
+                let func = &c["function"];
+                if let Some(n) = func.get("name").and_then(|n| n.as_str()) {
+                    if !n.is_empty() {
+                        slot.name = n.to_string();
+                    }
+                }
+                if let Some(a) = func.get("arguments").and_then(|a| a.as_str()) {
+                    slot.args.push_str(a);
+                }
+            }
+        }
+    }
+
+    fn finish(self, fallback_model: &str) -> ChatResponse {
+        let tool_calls: Vec<ToolCall> = self
+            .tools
+            .into_iter()
+            .enumerate()
+            .filter(|(_, t)| !t.name.is_empty())
+            .map(|(i, t)| {
+                let args = serde_json::from_str::<Json>(&t.args)
+                    .ok()
+                    .filter(|v| v.is_object());
+                ToolCall {
+                    id: if t.id.is_empty() {
+                        format!("call_{i}")
+                    } else {
+                        t.id
+                    },
+                    name: t.name,
+                    args,
+                    raw_args: t.args,
+                }
+            })
+            .collect();
+        let model = if self.model.is_empty() {
+            fallback_model.to_string()
+        } else {
+            self.model
+        };
+        ChatResponse {
+            text: self.text,
+            tool_calls,
+            stop_reason: map_stop(Some(self.finish_reason.as_str())),
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            model,
+        }
+    }
+}
+
 fn map_stop(s: Option<&str>) -> String {
     match s {
         Some("end_turn") | Some("stop") => "stop",
@@ -214,6 +472,63 @@ impl Provider for AnthropicProvider {
             ));
         }
         Ok(anthropic_parse(&body))
+    }
+
+    async fn chat_stream(
+        &self,
+        req: ChatRequest,
+        on_token: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<ChatResponse, ProviderError> {
+        let mut payload = anthropic_payload(&req, &self.model);
+        payload["stream"] = json!(true);
+        let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
+        let body = serde_json::to_vec(&payload).unwrap_or_default();
+        let headers = vec![
+            ("Content-Type".into(), "application/json".into()),
+            ("Accept".into(), "text/event-stream".into()),
+            ("x-api-key".into(), self.api_key.clone()),
+            ("anthropic-version".into(), ANTHROPIC_VERSION.into()),
+        ];
+        let hreq = HttpRequest {
+            method: "POST".into(),
+            url,
+            headers,
+            body: Some(body),
+            timeout_secs: 300,
+            allowed_domains: vec![],
+            allow_local: true,
+            enforce_egress: false,
+        };
+        let state = std::sync::Mutex::new(AnthropicAccum::default());
+        let buf = std::sync::Mutex::new(Vec::<u8>::new());
+        let raw = std::sync::Mutex::new(String::new());
+        let on_chunk = |bytes: Vec<u8>| {
+            {
+                let mut r = raw.lock().unwrap();
+                if r.len() < 2000 {
+                    r.push_str(&String::from_utf8_lossy(&bytes));
+                }
+            }
+            let mut b = buf.lock().unwrap();
+            sse_pump(&mut b, &bytes, |data| {
+                if let Ok(ev) = serde_json::from_str::<Json>(data) {
+                    state.lock().unwrap().apply(&ev, on_token);
+                }
+            });
+        };
+        let status = self
+            .http
+            .request_stream(hreq, &on_chunk)
+            .await
+            .map_err(|e| ProviderError::new(e.message, true))?;
+        if status != 200 {
+            let detail = raw.into_inner().unwrap();
+            return Err(ProviderError::new(
+                format!("anthropic stream {status}: {detail}"),
+                retryable(status),
+            ));
+        }
+        Ok(state.into_inner().unwrap().finish(&self.model))
     }
 }
 
@@ -358,6 +673,70 @@ impl Provider for OpenAICompatProvider {
         }
         openai_parse(&body)
     }
+
+    async fn chat_stream(
+        &self,
+        req: ChatRequest,
+        on_token: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<ChatResponse, ProviderError> {
+        let mut payload = openai_payload(&req, &self.model, &self.max_tokens_param);
+        payload["stream"] = json!(true);
+        payload["stream_options"] = json!({ "include_usage": true });
+        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
+        let mut headers = vec![
+            ("Content-Type".into(), "application/json".into()),
+            ("Accept".into(), "text/event-stream".into()),
+            ("Authorization".into(), format!("Bearer {}", self.api_key)),
+        ];
+        if self.variant == "openrouter" {
+            headers.push((
+                "HTTP-Referer".into(),
+                "https://github.com/orchard-lang/orchard".into(),
+            ));
+            headers.push(("X-Title".into(), "Orchard".into()));
+        }
+        let body = serde_json::to_vec(&payload).unwrap_or_default();
+        let hreq = HttpRequest {
+            method: "POST".into(),
+            url,
+            headers,
+            body: Some(body),
+            timeout_secs: 300,
+            allowed_domains: vec![],
+            allow_local: true,
+            enforce_egress: false,
+        };
+        let state = std::sync::Mutex::new(OpenAiAccum::default());
+        let buf = std::sync::Mutex::new(Vec::<u8>::new());
+        let raw = std::sync::Mutex::new(String::new());
+        let on_chunk = |bytes: Vec<u8>| {
+            {
+                let mut r = raw.lock().unwrap();
+                if r.len() < 2000 {
+                    r.push_str(&String::from_utf8_lossy(&bytes));
+                }
+            }
+            let mut b = buf.lock().unwrap();
+            sse_pump(&mut b, &bytes, |data| {
+                if let Ok(ev) = serde_json::from_str::<Json>(data) {
+                    state.lock().unwrap().apply(&ev, on_token);
+                }
+            });
+        };
+        let status = self
+            .http
+            .request_stream(hreq, &on_chunk)
+            .await
+            .map_err(|e| ProviderError::new(e.message, true))?;
+        if status != 200 {
+            let detail = raw.into_inner().unwrap();
+            return Err(ProviderError::new(
+                format!("{} stream {status}: {detail}", self.variant),
+                retryable(status),
+            ));
+        }
+        Ok(state.into_inner().unwrap().finish(&self.model))
+    }
 }
 
 // ---- Ollama ----
@@ -486,6 +865,24 @@ impl Provider for FallbackProvider {
         }
         Err(last.unwrap_or_else(|| ProviderError::new("no providers configured", false)))
     }
+
+    async fn chat_stream(
+        &self,
+        req: ChatRequest,
+        on_token: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<ChatResponse, ProviderError> {
+        // Stream from the first provider that accepts the request; on a retryable
+        // failure fall through to the next link, mirroring `chat`.
+        let mut last: Option<ProviderError> = None;
+        for p in &self.chain {
+            match p.chat_stream(req.clone(), on_token).await {
+                Ok(r) => return Ok(r),
+                Err(e) if e.retryable => last = Some(e),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last.unwrap_or_else(|| ProviderError::new("no providers configured", false)))
+    }
 }
 
 async fn call_with_retry(
@@ -577,5 +974,117 @@ fn build_one(
             base_url: base_url.unwrap_or("http://localhost:11434").to_string(),
         })),
         other => Err(format!("unknown provider '{other}'")),
+    }
+}
+
+#[cfg(test)]
+mod sse_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// Drive an accumulator through a raw SSE byte stream split at arbitrary
+    /// boundaries, collecting the streamed tokens, and return the final response.
+    fn run_anthropic(stream: &[u8], splits: &[usize]) -> (Vec<String>, ChatResponse) {
+        let tokens = Mutex::new(Vec::<String>::new());
+        let on_token: Box<dyn Fn(String) + Send + Sync> =
+            Box::new(|t| tokens.lock().unwrap().push(t));
+        let mut accum = AnthropicAccum::default();
+        let mut buf = Vec::<u8>::new();
+        let mut start = 0;
+        let mut cuts: Vec<usize> = splits.to_vec();
+        cuts.push(stream.len());
+        for end in cuts {
+            sse_pump(&mut buf, &stream[start..end], |data| {
+                if let Ok(ev) = serde_json::from_str::<Json>(data) {
+                    accum.apply(&ev, on_token.as_ref());
+                }
+            });
+            start = end;
+        }
+        drop(on_token);
+        let resp = accum.finish("fallback-model");
+        (tokens.into_inner().unwrap(), resp)
+    }
+
+    #[test]
+    fn anthropic_streams_text_and_usage() {
+        // A realistic text-only message stream, deliberately chopped mid-line.
+        let s = concat!(
+            "event: message_start\n",
+            "data: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-x\",\"usage\":{\"input_tokens\":11,\"output_tokens\":0}}}\n\n",
+            "event: content_block_start\n",
+            "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\", world\"}}\n\n",
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":7}}\n\n",
+            "data: {\"type\":\"message_stop\"}\n\n",
+        ).as_bytes();
+        // Split inside the first text delta's JSON to exercise cross-chunk buffering.
+        let (tokens, resp) = run_anthropic(s, &[40, 120, 260, 400]);
+        assert_eq!(tokens, vec!["Hello".to_string(), ", world".to_string()]);
+        assert_eq!(resp.text, "Hello, world");
+        assert_eq!(resp.input_tokens, 11);
+        assert_eq!(resp.output_tokens, 7);
+        assert_eq!(resp.stop_reason, "stop");
+        assert_eq!(resp.model, "claude-x");
+        assert!(resp.tool_calls.is_empty());
+    }
+
+    #[test]
+    fn anthropic_streams_tool_call_with_partial_json() {
+        let s = concat!(
+            "data: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-x\",\"usage\":{\"input_tokens\":5,\"output_tokens\":0}}}\n\n",
+            "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"calculate\"}}\n\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"expr\\\":\"}}\n\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"6*7\\\"}\"}}\n\n",
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":9}}\n\n",
+        ).as_bytes();
+        let (tokens, resp) = run_anthropic(s, &[]);
+        assert!(tokens.is_empty(), "tool-call streams emit no visible text tokens");
+        assert_eq!(resp.stop_reason, "tool_use");
+        assert_eq!(resp.tool_calls.len(), 1);
+        let tc = &resp.tool_calls[0];
+        assert_eq!(tc.name, "calculate");
+        assert_eq!(tc.id, "toolu_1");
+        assert_eq!(tc.args.as_ref().unwrap()["expr"], "6*7");
+    }
+
+    fn run_openai(stream: &[u8]) -> (Vec<String>, ChatResponse) {
+        let tokens = Mutex::new(Vec::<String>::new());
+        let on_token: Box<dyn Fn(String) + Send + Sync> =
+            Box::new(|t| tokens.lock().unwrap().push(t));
+        let mut accum = OpenAiAccum::default();
+        let mut buf = Vec::<u8>::new();
+        sse_pump(&mut buf, stream, |data| {
+            if let Ok(ev) = serde_json::from_str::<Json>(data) {
+                accum.apply(&ev, on_token.as_ref());
+            }
+        });
+        drop(on_token);
+        (tokens.into_inner().unwrap(), accum.finish("fallback-model"))
+    }
+
+    #[test]
+    fn openai_streams_text_and_tool_calls() {
+        let s = concat!(
+            "data: {\"model\":\"gpt-x\",\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\" there\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_a\",\"function\":{\"name\":\"calculate\",\"arguments\":\"{\\\"x\\\":\"}}]},\"finish_reason\":null}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"42}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":12}}\n\n",
+            "data: [DONE]\n\n",
+        ).as_bytes();
+        let (tokens, resp) = run_openai(s);
+        assert_eq!(tokens, vec!["Hi".to_string(), " there".to_string()]);
+        assert_eq!(resp.text, "Hi there");
+        assert_eq!(resp.input_tokens, 3);
+        assert_eq!(resp.output_tokens, 12);
+        assert_eq!(resp.stop_reason, "tool_use");
+        assert_eq!(resp.model, "gpt-x");
+        assert_eq!(resp.tool_calls.len(), 1);
+        let tc = &resp.tool_calls[0];
+        assert_eq!(tc.name, "calculate");
+        assert_eq!(tc.id, "call_a");
+        assert_eq!(tc.args.as_ref().unwrap()["x"], 42);
     }
 }

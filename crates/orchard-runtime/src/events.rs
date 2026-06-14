@@ -28,6 +28,8 @@ pub enum AgentEvent {
         tools: usize,
         kind: ModelKind,
     },
+    /// A text delta streamed from the model (token-level streaming).
+    Token { text: String },
     /// A model response arrived.
     ModelEnd {
         model: String,

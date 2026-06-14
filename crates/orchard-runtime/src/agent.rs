@@ -184,9 +184,11 @@ impl AgentRuntime {
             tools: 0,
             kind: crate::events::ModelKind::Gen,
         });
+        let on_token =
+            |d: String| self.emit_event(crate::events::AgentEvent::Token { text: d });
         let resp = self
             .provider
-            .chat(req)
+            .chat_stream(req, &on_token)
             .await
             .map_err(|e| HostError::Provider(e.message))?;
         let model = if resp.model.is_empty() {

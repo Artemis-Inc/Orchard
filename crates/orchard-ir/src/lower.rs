@@ -821,7 +821,12 @@ pub fn external_effects(body: &Block, http_web_only: bool) -> bool {
                     }
                 }
                 ExprKind::Ident(n) => {
-                    if n == "web_search" || n == "fetch_page" {
+                    if n == "web_search"
+                        || n == "fetch_page"
+                        || n == "browser_open"
+                        || n == "browser_read"
+                        || n == "browser_eval"
+                    {
                         found = true;
                     }
                     if !http_web_only && n == "shell" {

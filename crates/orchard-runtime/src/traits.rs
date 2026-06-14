@@ -90,6 +90,21 @@ pub trait Provider: Send + Sync {
         false
     }
     async fn chat(&self, req: ChatRequest) -> Result<ChatResponse, ProviderError>;
+    /// Streaming chat: the same result as [`Provider::chat`], but `on_token` is
+    /// called with text deltas as they arrive. The default is non-streaming and
+    /// emits the whole text once, so every provider works; streaming providers
+    /// override this.
+    async fn chat_stream(
+        &self,
+        req: ChatRequest,
+        on_token: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<ChatResponse, ProviderError> {
+        let r = self.chat(req).await?;
+        if !r.text.is_empty() {
+            on_token(r.text.clone());
+        }
+        Ok(r)
+    }
     fn describe(&self) -> String {
         "provider".to_string()
     }
@@ -192,6 +207,19 @@ pub struct HttpResponse {
 #[async_trait]
 pub trait HttpClient: Send + Sync {
     async fn request(&self, req: HttpRequest) -> Result<HttpResponse, HttpError>;
+    /// Stream a response body in chunks, calling `on_chunk` with raw bytes as
+    /// they arrive (for Server-Sent Events). Returns the HTTP status. The default
+    /// does a normal request and delivers the whole body as one chunk, so clients
+    /// that cannot stream still work.
+    async fn request_stream(
+        &self,
+        req: HttpRequest,
+        on_chunk: &(dyn Fn(Vec<u8>) + Send + Sync),
+    ) -> Result<u16, HttpError> {
+        let resp = self.request(req).await?;
+        on_chunk(resp.body.clone());
+        Ok(resp.status)
+    }
 }
 
 // ---- embedder ----

@@ -164,6 +164,32 @@ impl Provider for MockProvider {
             }
         }
     }
+
+    async fn chat_stream(
+        &self,
+        req: ChatRequest,
+        on_token: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<ChatResponse, ProviderError> {
+        // Resolve the response with the normal mock logic, then stream its text
+        // back in small chunks so the offline experience shows token streaming.
+        let resp = self.chat(req).await?;
+        let text = resp.text.clone();
+        if !text.is_empty() {
+            let mut chunk = String::new();
+            for ch in text.chars() {
+                chunk.push(ch);
+                if ch.is_whitespace() || chunk.chars().count() >= 5 {
+                    on_token(std::mem::take(&mut chunk));
+                    #[cfg(feature = "native")]
+                    tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+                }
+            }
+            if !chunk.is_empty() {
+                on_token(chunk);
+            }
+        }
+        Ok(resp)
+    }
 }
 
 /// Deterministic JSON synthesis from a JSON Schema (v2's `_synthesize_json`).

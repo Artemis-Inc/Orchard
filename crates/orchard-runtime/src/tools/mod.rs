@@ -5,6 +5,8 @@
 //! the native host-tool API (the embedding superpower). `http`/`shell`/`web`
 //! tool bodies + MCP land with the HTTP client and gating (P12/P13).
 
+#[cfg(feature = "native")]
+pub mod browser;
 pub mod calc;
 #[cfg(feature = "native")]
 pub mod mcp;
@@ -248,6 +250,14 @@ fn add_pack(
             ctx.interactive,
             ctx.base_dir.clone(),
         )),
+        #[cfg(feature = "native")]
+        "browser" => {
+            let headless = options
+                .get("headless")
+                .and_then(|h| h.as_bool())
+                .unwrap_or(true);
+            out.extend(browser::browser_pack(headless));
+        }
         _ => {}
     }
 }

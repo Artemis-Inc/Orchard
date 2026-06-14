@@ -1928,10 +1928,13 @@ impl Engine {
                 tools: tooldefs.len(),
                 kind: crate::events::ModelKind::Delegate,
             });
+            let rt = self.runtime.clone();
+            let on_token =
+                move |d: String| rt.emit_event(crate::events::AgentEvent::Token { text: d });
             let resp = self
                 .runtime
                 .provider
-                .chat(req)
+                .chat_stream(req, &on_token)
                 .await
                 .map_err(|e| HostError::Provider(e.message))?;
             let model = if resp.model.is_empty() {

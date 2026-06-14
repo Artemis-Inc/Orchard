@@ -225,6 +225,7 @@ fn read_input(meta: &Meta) -> std::io::Result<Option<Outcome>> {
 
 /// Drive one agent turn, streaming the live pipeline. `fut` resolves to the
 /// final reply text.
+#[allow(unused_assignments)] // the final end_stream! before return clears `streaming`
 async fn stream<F>(fut: F, rx: &mut UnboundedReceiver<AgentEvent>) -> Result<String, orchard::Error>
 where
     F: std::future::Future<Output = Result<String, orchard::Error>>,
@@ -237,13 +238,24 @@ where
     let mut tools = 0u32;
     let mut activity = String::from("Thinking");
     let mut spinning = false;
+    let mut streaming = false; // model text is printing inline right now
+    let mut last_text = String::new(); // most recent model-step text (for dedup)
 
+    macro_rules! end_stream {
+        () => {{
+            if streaming {
+                wln("");
+                streaming = false;
+            }
+        }};
+    }
     macro_rules! commit {
         ($line:expr) => {{
             if spinning {
                 clear_line();
                 spinning = false;
             }
+            end_stream!();
             wln(&$line);
         }};
     }
@@ -267,9 +279,16 @@ where
             maybe = rx.recv() => {
                 let Some(ev) = maybe else { continue };
                 match &ev {
+                    AgentEvent::Token { text } => {
+                        if spinning { clear_line(); spinning = false; }
+                        w(&text.replace('\n', "\r\n"));
+                        streaming = true;
+                    }
                     AgentEvent::ModelStart { .. } => { activity = "Thinking".into(); }
-                    AgentEvent::ModelEnd { input_tokens, output_tokens, .. } => {
+                    AgentEvent::ModelEnd { input_tokens, output_tokens, text, .. } => {
                         in_tok += *input_tokens; out_tok += *output_tokens;
+                        last_text = text.clone();
+                        end_stream!();
                     }
                     AgentEvent::ToolStart { name, .. } => {
                         tools += 1;
@@ -288,8 +307,10 @@ where
             }
             _ = tokio::time::sleep(Duration::from_millis(90)) => {
                 frame += 1;
-                draw_spinner(frame, &activity, in_tok, out_tok, tools);
-                spinning = true;
+                if !streaming {
+                    draw_spinner(frame, &activity, in_tok, out_tok, tools);
+                    spinning = true;
+                }
                 // allow ctrl-c to interrupt a long turn
                 if event::poll(Duration::ZERO).unwrap_or(false) {
                     if let Ok(Event::Key(k)) = event::read() {
@@ -302,29 +323,45 @@ where
                 }
             }
             res = &mut fut => {
-                if spinning { clear_line(); }
+                if spinning { clear_line(); spinning = false; }
                 while let Ok(ev) = rx.try_recv() {
-                    if let Some(l) = line_for(&ev) { wln(&l); }
+                    match &ev {
+                        AgentEvent::Token { text } => {
+                            w(&text.replace('\n', "\r\n"));
+                            streaming = true;
+                        }
+                        AgentEvent::ModelEnd { text, .. } => {
+                            last_text = text.clone();
+                            end_stream!();
+                        }
+                        other => {
+                            if let Some(l) = line_for(other) {
+                                end_stream!();
+                                wln(&l);
+                            }
+                        }
+                    }
+                }
+                end_stream!();
+                match &res {
+                    Ok(reply) => {
+                        let already =
+                            !reply.trim().is_empty() && reply.trim() == last_text.trim();
+                        if !already && !reply.trim().is_empty() {
+                            wln("");
+                            for l in reply.lines() {
+                                wln(&format!("  {l}"));
+                            }
+                        }
+                        wln("");
+                    }
+                    Err(e) => {
+                        wln(&rgb(&format!("  error: {e}"), G_DEEP));
+                        wln("");
+                    }
                 }
                 return res;
             }
-        }
-    }
-}
-
-fn print_reply(r: Result<String, orchard::Error>) {
-    match r {
-        Ok(text) if text.trim().is_empty() => {}
-        Ok(text) => {
-            wln("");
-            for l in text.lines() {
-                wln(&format!("  {l}"));
-            }
-            wln("");
-        }
-        Err(e) => {
-            wln(&rgb(&format!("  error: {e}"), G_DEEP));
-            wln("");
         }
     }
 }
@@ -391,8 +428,7 @@ pub async fn run(
                     continue;
                 }
                 wln(&format!("{} {}", rgb("›", G), text));
-                let r = stream(session.message(&text), &mut rx).await;
-                print_reply(r);
+                let _ = stream(session.message(&text), &mut rx).await;
             }
             Some(Outcome::Skill(name)) => {
                 wln(&format!("{} {}", rgb("/", G), bold(&name)));
@@ -402,8 +438,7 @@ pub async fn run(
                         .await
                         .map(|v| v.to_text())
                 };
-                let r = stream(fut, &mut rx).await;
-                print_reply(r);
+                let _ = stream(fut, &mut rx).await;
             }
         }
     }

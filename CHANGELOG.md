@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.1.0 — The agent terminal
 
 ### The agent terminal (`orch run`)
 - `orch run` is now a live agent terminal. An entrance banner shows the agent,
@@ -12,9 +12,32 @@
 - New runtime event stream: `RuntimeBuilder::on_event` observes the live pipeline
   via `AgentEvent` (model start/end with usage, tool start/end, `emit`, task
   complete). The same events power the TUI and can drive any host UI.
-- `orch new` now scaffolds a capable, commented starter agent that grants tools
-  and runs offline. Added `examples/3.0/atlas.orch`, a flagship agent granted
-  files, shell, web, HTTP, and math, with skills and a safety policy.
+
+### Token-level streaming
+- The model's answer now streams token by token into the terminal as it is
+  generated, so the thinking/answer text appears live instead of in one block.
+- Implemented end to end: a streaming path through the `HttpClient` and
+  `Provider` traits (`request_stream` / `chat_stream`), real Server-Sent-Events
+  parsing for Anthropic and OpenAI-compatible providers (text deltas, streamed
+  tool calls, and usage), streaming through provider fallback chains, and a
+  chunked offline path for the `mock` provider. Non-streaming clients keep
+  working unchanged via safe defaults.
+
+### Browser control
+- New `browser` tool pack: grant it with one line, `use browser`, and the
+  autonomous loop can drive a real headless Chrome over the Chrome DevTools
+  Protocol — `browser_open`, `browser_read` (rendered text, after JavaScript),
+  `browser_click`, `browser_type`, `browser_eval`, and `browser_screenshot`
+  (saves a real PNG). It launches Chrome with an ephemeral profile, speaks CDP
+  directly over a WebSocket, and tears the browser down when the run ends. Page
+  content is treated as untrusted (sentinel-wrapped). Set `$ORCH_CHROME` to
+  point at a specific Chrome/Chromium binary.
+
+### Examples & scaffolding
+- `orch new` scaffolds a capable, commented starter agent that grants tools and
+  runs offline. Added `examples/3.0/atlas.orch` (a flagship agent granted files,
+  shell, web, HTTP, browser, and math, with skills and a safety policy) and
+  `examples/3.0/scout.orch` (a web-research agent that drives the browser).
 
 ## 3.0.0 — A Rust rewrite
 

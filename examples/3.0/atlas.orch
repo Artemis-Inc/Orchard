@@ -42,6 +42,7 @@ agent Atlas {
     use shell                 // run shell commands (gated by policy below)
     use web                   // fetch and read web pages
     use http                  // call HTTP APIs
+    use browser               // drive a real headless browser (open/read/click/screenshot)
     use calculator            // exact arithmetic
     use time                  // current date and time
 

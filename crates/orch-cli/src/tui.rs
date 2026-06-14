@@ -178,6 +178,8 @@ pub(crate) fn line_for(ev: &AgentEvent) -> Option<String> {
             ))
         }
         AgentEvent::Emit { text } => Some(format!("  {} {}", rgb("·", G_LIGHT), text)),
+        // Tokens are streamed inline by the caller, never committed as a line.
+        AgentEvent::Token { .. } => None,
         AgentEvent::TaskComplete { .. } => None,
         AgentEvent::Notice { text, .. } => Some(format!("  {} {}", dim("!"), dim(text))),
     }
@@ -187,6 +189,7 @@ pub(crate) fn line_for(ev: &AgentEvent) -> Option<String> {
 // Plain streaming mode (piped stdin / no tty)
 // ---------------------------------------------------------------------------
 
+#[allow(unused_assignments)] // the final end_stream! before the reply clears `streaming`
 async fn run_plain(session: Session, mut rx: UnboundedReceiver<AgentEvent>, meta: Meta) {
     print!("{}", banner(&meta));
     println!("  {}\n", hint(&meta));
@@ -211,23 +214,48 @@ async fn run_plain(session: Session, mut rx: UnboundedReceiver<AgentEvent>, meta
 
         let fut = session.message(&input);
         tokio::pin!(fut);
+        let mut streaming = false;
+        let mut last_text = String::new();
+        macro_rules! end_stream {
+            () => {{
+                if streaming {
+                    println!();
+                    streaming = false;
+                }
+            }};
+        }
         let reply = loop {
             tokio::select! {
                 biased;
                 Some(ev) = rx.recv() => {
-                    if let Some(line) = line_for(&ev) { println!("{line}"); let _ = std::io::stdout().flush(); }
+                    match &ev {
+                        AgentEvent::Token { text } => { print!("{text}"); let _ = std::io::stdout().flush(); streaming = true; }
+                        AgentEvent::ModelEnd { text, .. } => { last_text = text.clone(); end_stream!(); }
+                        other => { if let Some(line) = line_for(other) { end_stream!(); println!("{line}"); let _ = std::io::stdout().flush(); } }
+                    }
                 }
                 res = &mut fut => {
                     while let Ok(ev) = rx.try_recv() {
-                        if let Some(line) = line_for(&ev) { println!("{line}"); }
+                        match &ev {
+                            AgentEvent::Token { text } => { print!("{text}"); streaming = true; }
+                            AgentEvent::ModelEnd { text, .. } => { last_text = text.clone(); end_stream!(); }
+                            other => { if let Some(line) = line_for(other) { end_stream!(); println!("{line}"); } }
+                        }
                     }
+                    end_stream!();
                     break res;
                 }
             }
         };
         match reply {
-            Ok(text) => println!("\n{}\n", text),
-            Err(e) => eprintln!("{} {e}\n", "orch:"),
+            Ok(text) => {
+                let already = !text.trim().is_empty() && text.trim() == last_text.trim();
+                if !already && !text.trim().is_empty() {
+                    println!("\n{text}");
+                }
+                println!();
+            }
+            Err(e) => eprintln!("orch: {e}\n"),
         }
     }
 }
