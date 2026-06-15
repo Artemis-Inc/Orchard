@@ -73,7 +73,7 @@ irm https://raw.githubusercontent.com/Artemis-Inc/Orchard/main/scripts/install.p
 With Cargo, or Docker if you would rather not install anything:
 
 ```console
-$ cargo install orch-cli
+$ cargo install --git https://github.com/Artemis-Inc/Orchard orch-cli
 $ docker run --rm ghcr.io/artemis-inc/orchard:latest --version
 ```
 
