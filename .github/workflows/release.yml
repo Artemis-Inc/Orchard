@@ -177,9 +177,12 @@ jobs:
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
+      # Check out the default branch (not the release tag) so this job always has
+      # the current tooling (scripts/update-homebrew.sh), even when an older tag
+      # is re-run. The version it publishes comes from the tag, not the tree.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: main
       - name: Regenerate the formula and push it to the tap
         env:
           # A personal access token with push access to
@@ -202,8 +205,7 @@ jobs:
           done
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/Artemis-Inc/homebrew-orchard.git" tap
           mkdir -p tap/Formula
-          scripts/update-homebrew.sh "$VERSION" /tmp/SHA256SUMS tap/Formula/orchard.rb
-          cp tap/Formula/orchard.rb packaging/homebrew/orchard.rb || true
+          sh scripts/update-homebrew.sh "$VERSION" /tmp/SHA256SUMS tap/Formula/orchard.rb
           cd tap
           git config user.name "Thomas Guthrie"
           git config user.email "officialthomasguthrie@gmail.com"

@@ -1,0 +1,38 @@
+name: verify tap token
+
+# Manually-run check that HOMEBREW_TAP_TOKEN can push to the Homebrew tap.
+# It performs a dry-run push, which authenticates against GitHub's receive-pack
+# (so a read-only or missing token is rejected) but changes nothing in the tap.
+#
+#   gh workflow run verify-tap-token.yml
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: dry-run push to the tap
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check token can push to Artemis-Inc/homebrew-orchard
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN is not set"
+            exit 1
+          fi
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/Artemis-Inc/homebrew-orchard.git" tap
+          cd tap
+          # A dry-run push contacts git-receive-pack, which requires write access
+          # to authenticate; it reports what would happen without pushing.
+          if git push --dry-run origin HEAD; then
+            echo "✅ HOMEBREW_TAP_TOKEN can push to the tap (write access confirmed)"
+          else
+            echo "::error::token cannot push to the tap (read-only or no access)"
+            exit 1
+          fi

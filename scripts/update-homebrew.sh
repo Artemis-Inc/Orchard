@@ -58,6 +58,12 @@ class Orchard < Formula
   version "${version}"
   license "Apache-2.0"
 
+  # Lets \`brew livecheck\` (and Homebrew's autobump) detect new releases.
+  livecheck do
+    url "https://github.com/Artemis-Inc/Orchard/releases/latest"
+    regex(%r{tag/v?(\d+(?:\.\d+)+)}i)
+  end
+
   on_macos do
     on_arm do
       url "$(url aarch64-apple-darwin)"
