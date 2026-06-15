@@ -11,7 +11,7 @@ class Orchard < Formula
   desc "Typed, concurrent language for building LLM agents"
   homepage "https://github.com/Artemis-Inc/Orchard"
   version "3.1.0"
-  license "Apache-2.0"
+  license "MIT"
 
   # Lets `brew livecheck` (and Homebrew's autobump) detect new releases.
   livecheck do

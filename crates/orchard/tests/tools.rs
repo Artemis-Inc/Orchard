@@ -23,7 +23,7 @@ async fn demo_offline_runs_end_to_end() {
     let out = session.task("demo").await.unwrap();
     assert_eq!(
         out,
-        "Done — 6 × 7 = 42, saved to memory as 'last_answer'. Ran fully offline."
+        "Done. 6 × 7 = 42, saved to memory as 'last_answer'. Ran fully offline."
     );
     // the calculator + remember really ran: the fact is in the store.
     use orchard_runtime::Store;

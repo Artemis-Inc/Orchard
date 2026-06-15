@@ -22,4 +22,4 @@
       args: { text: "6 * 7 = 42, saved as last_answer" }
 
 # Turn 4 — no tool calls, just final text: the loop ends and this is the reply.
-- text: "Done — 6 × 7 = 42, saved to memory as 'last_answer'. Ran fully offline."
+- text: "Done. 6 × 7 = 42, saved to memory as 'last_answer'. Ran fully offline."
